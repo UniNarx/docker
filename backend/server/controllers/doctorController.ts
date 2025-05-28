@@ -5,6 +5,8 @@ import User from '../models/User'; // Для создания пользоват
 import Role from '../models/Role'; // Для назначения роли "Doctor"
 import bcrypt from 'bcryptjs';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
+import { isValidObjectId } from 'mongoose';
+
 
 // @desc    Создать нового врача (только Admin/SuperAdmin)
 // @route   POST /api/doctors
@@ -135,5 +137,107 @@ export const getDoctorById = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ message: 'Ошибка сервера при получении информации о враче' });
   }
 };
+export const updateDoctorById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const doctorId = req.params.id;
+  const { firstName, lastName, specialty } = req.body; // Ожидаем camelCase
 
-// TODO: Добавить updateDoctor, deleteDoctor, getDoctorProfile (для залогиненного врача - /api/doctors/me)
+  console.log(`[DoctorController] updateDoctorById hit. Doctor ID: ${doctorId}`);
+
+  if (!isValidObjectId(doctorId)) { // isValidObjectId из mongoose
+    res.status(400).json({ message: 'Некорректный ID врача' });
+    return;
+  }
+
+  if (!firstName || !lastName || !specialty) {
+    res.status(400).json({ message: 'Имя, фамилия и специализация обязательны для обновления' });
+    return;
+  }
+
+  try {
+    const doctor = await Doctor.findById(doctorId);
+
+    if (!doctor) {
+      res.status(404).json({ message: 'Врач не найден' });
+      return;
+    }
+
+    doctor.firstName = firstName;
+    doctor.lastName = lastName;
+    doctor.specialty = specialty;
+    // Не обновляем user или password здесь, это должно делаться через другие эндпоинты
+
+    const updatedDoctor = await doctor.save();
+    console.log(`[DoctorController] Doctor profile ID: ${updatedDoctor._id} updated.`);
+    res.status(200).json(updatedDoctor);
+  } catch (error: any) {
+    console.error(`[DoctorController] Ошибка в updateDoctorById (ID: ${doctorId}):`, error);
+    res.status(500).json({ message: 'Ошибка сервера при обновлении данных врача' });
+  }
+};
+export const deleteDoctorById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const doctorId = req.params.id; // Это ID из модели Doctor (Doctor Profile ID)
+  console.log(`[DoctorController] deleteDoctorById hit. Doctor Profile ID: ${doctorId}`);
+
+  if (!isValidObjectId(doctorId)) {
+    res.status(400).json({ message: 'Некорректный ID профиля врача' });
+    return;
+  }
+
+  try {
+    const doctorProfile = await Doctor.findById(doctorId);
+
+    if (!doctorProfile) {
+      res.status(404).json({ message: 'Профиль врача не найден' });
+      return;
+    }
+
+    const userIdToDelete = doctorProfile.user; // Получаем ID пользователя, связанного с этим профилем врача
+
+    // 1. Удаляем профиль врача
+    const deletedDoctorProfile = await Doctor.findByIdAndDelete(doctorId);
+    if (!deletedDoctorProfile) {
+      // Это не должно произойти, если findById нашел его выше, но для подстраховки
+      res.status(404).json({ message: 'Профиль врача не найден для удаления (повторно)' });
+      return;
+    }
+    console.log(`[DoctorController] Doctor profile ID: ${doctorId} deleted.`);
+
+    // 2. Удаляем связанного пользователя
+    if (userIdToDelete) {
+      const deletedUser = await User.findByIdAndDelete(userIdToDelete);
+      if (deletedUser) {
+        console.log(`[DoctorController] Associated User ID: ${userIdToDelete} deleted.`);
+      } else {
+        console.warn(`[DoctorController] User ID: ${userIdToDelete} associated with doctor profile ${doctorId} not found or already deleted.`);
+      }
+    } else {
+      console.warn(`[DoctorController] No user ID found in doctor profile ${doctorId} to delete.`);
+    }
+
+    // TODO: Потенциально нужно также:
+    // - Открепить этого врача от всех пациентов (удалить doctorId из patient.assignedDoctors)
+    // - Обработать записи на прием (appointments), связанные с этим врачом (отменить, переназначить?)
+    // - Обработать медицинские записи (medical records), созданные этим врачом (обычно они остаются с указанием на удаленного врача, или архивируются)
+
+    res.status(200).json({ message: 'Врач и связанный пользователь успешно удалены' });
+
+  } catch (error: any) {
+    console.error(`[DoctorController] Ошибка в deleteDoctorById (Doctor Profile ID: ${doctorId}):`, error);
+    res.status(500).json({ message: 'Ошибка сервера при удалении врача' });
+  }
+};
+export const getMyDoctorProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const doctorProfile = await Doctor.findOne({ user: req.user?.id }) // Находим профиль врача по userId из токена
+      .populate('user', 'username'); // Опционально популируем пользователя
+
+    if (!doctorProfile) {
+      res.status(404).json({ message: 'Профиль врача для текущего пользователя не найден.' });
+      return;
+    }
+    res.status(200).json(doctorProfile);
+  } catch (error: any) {
+    console.error('[DoctorController] Ошибка в getMyDoctorProfile:', error);
+    res.status(500).json({ message: 'Ошибка сервера при получении профиля врача' });
+  }
+};

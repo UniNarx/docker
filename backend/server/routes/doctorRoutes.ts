@@ -1,6 +1,6 @@
 // server/routes/doctorRoutes.ts
 import { Router } from 'express';
-import { createDoctor, getAllDoctors, getDoctorById } from '../controllers/doctorController';
+import { createDoctor, getMyDoctorProfile, getAllDoctors, getDoctorById, updateDoctorById, deleteDoctorById } from '../controllers/doctorController'; 
 import { getAssignedPatientsForDoctor } from '../controllers/patientDoctorController'; // <--- Импортируем
 import { getDoctorAppointments, getDoctorAvailability } from '../controllers/appointmentController'; // <--- Импортируем getDoctorAvailability
 import { protect } from '../middleware/authMiddleware';
@@ -12,6 +12,7 @@ console.log('[DoctorRoutes] Файл doctorRoutes.ts ЗАГРУЖЕН, роут�
 
 router.post('/', protect, authorize(['Admin', 'SuperAdmin']), createDoctor);
 router.get('/', getAllDoctors);
+router.get('/me', protect, authorize(['Doctor']), getMyDoctorProfile); // Маршрут для получения своего профиля врача
 
 // Маршрут для проверки доступности времени у врача
 // GET /api/doctors/:doctorId/availability?date=YYYY-MM-DD
@@ -25,5 +26,10 @@ router.get(
     authorize(['Doctor', 'Admin', 'SuperAdmin']), // Врач своих, Админы - любых
     getAssignedPatientsForDoctor
 );
+
+router.route('/:id')
+    .get(getDoctorById) // Существующий
+    .put(protect, authorize(['Admin', 'SuperAdmin']), updateDoctorById)
+    .delete(protect, authorize(['Admin', 'SuperAdmin']), deleteDoctorById);
 
 export default router;

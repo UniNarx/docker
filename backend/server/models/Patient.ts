@@ -9,7 +9,7 @@ export interface IPatient extends Document<Types.ObjectId> {
   user: Types.ObjectId | IUser;
   firstName?: string;
   lastName?: string;
-  dateOfBirth: Date;
+  dateOfBirth?: Date;
   assignedDoctors?: (Types.ObjectId)[]; // Массив ID профилей врачей
   createdAt: Date;
   updatedAt: Date;
@@ -36,7 +36,7 @@ const PatientSchema = new Schema<IPatient>(
     },
     dateOfBirth: {
       type: Date,
-      required: true,
+      required: false,
     },
     assignedDoctors: [{ // Массив ссылок на профили врачей (Doctor)
       type: Schema.Types.ObjectId,

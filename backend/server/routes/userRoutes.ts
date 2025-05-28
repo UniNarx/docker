@@ -1,14 +1,18 @@
 // server/routes/userRoutes.ts
 import { Router } from 'express';
 import { protect, AuthenticatedRequest } from '../middleware/authMiddleware';
+import { changePassword } from '../controllers/authController';
 import { authorize } from '../middleware/roleMiddleware'; // <--- Импортируем authorize
 import { Response } from 'express';
+import { getAllUsers, deleteUserById } from '../controllers/authController'; 
+
 
 const router = Router();
 
 console.log('[UserRoutes] Файл userRoutes.ts ЗАГРУЖЕН, роутер создан.');
 
 // ... (логи ПЕРЕД/ПОСЛЕ определения маршрутов, если вы их оставили для отладки) ...
+router.get('/', protect, authorize(['SuperAdmin']), getAllUsers); // Только для SuperAdmin
 
 // GET /api/users/me - теперь требует роль 'Patient' (или выше, если бы мы так настроили)
 router.get(
@@ -52,5 +56,8 @@ router.get('/test', (req, res) => {
   console.log('[UserRoutes] ВНУТРИ обработчика GET /users/test');
   res.status(200).send('User routes test endpoint reached!');
 });
+router.put('/me/password', protect, changePassword);
+
+router.delete('/:userId', protect, authorize(['SuperAdmin']), deleteUserById); // <--- ДОБАВЛЕННЫЙ МАРШРУТ
 
 export default router;

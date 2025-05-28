@@ -1,52 +1,107 @@
-// src/app/dashboard/patient/medical_records/page.tsx
+// src/app/dashboard/patients/medical_records/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { motion } from 'framer-motion'
 
-type Record = {
-  id: number
-  doctor_id: number
-  visit_date: string
-  notes: string
-  attachments: string[]
-}
-type Doctor   = { id: number; first_name: string; last_name: string }
-type PatientMe = { id: number }
+// Тип для информации о докторе, вложенной в MedicalRecordEntry
+type EmbeddedDoctorInfo = {
+  _id: string; // ID профиля доктора
+  id?: string;
+  firstName: string;
+  lastName: string;
+  specialty?: string; // Если специальность тоже приходит
+};
+
+// Обновленный тип MedicalRecordEntry
+type MedicalRecordEntry = {
+  _id: string;
+  id?: number; // Если есть старый ID для ключа
+  // doctorId: string; // Больше не нужен, если doctor - объект
+  visitDate: string;
+  notes: string;
+  attachments?: string[];
+  doctor: EmbeddedDoctorInfo; // Теперь это объект
+};
+
+// DoctorInfo для /doctors (если все еще нужен, например, для какой-то другой логики или если populate не всегда работает)
+// type DoctorInfo = {
+//   _id: string;
+//   id?: number;
+//   firstName: string;
+//   lastName: string;
+// };
+
+type PatientProfileInfo = {
+  id?: string;
+  _id: string;
+  user?: string | { username?: string; _id?: string };
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+};
+
 
 export default function MyMedicalRecordsPage() {
-  const [recs,    setRecs]    = useState<Record[] | null>(null)
-  const [doctors, setDoctors] = useState<Record<number,string>>({})
-  const [error,   setError]   = useState<string|null>(null)
+  const [medicalRecords, setMedicalRecords] = useState<MedicalRecordEntry[] | null>(null);
+  // doctorsMap больше не нужен, если информация о враче приходит с каждой медкартой
+  // const [doctorsMap, setDoctorsMap] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  /* — стили «glass & dark» — */
-  const glassCard  = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg"
-  const linkStyle  = "text-indigo-300 hover:text-indigo-100 underline transition-colors"
+  const glassCard  = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
 
-  /* ---------- загрузка данных ---------- */
   useEffect(() => {
-    let pid = 0
-    apiFetch<PatientMe>('/patients/me')
-      .then(me => {
-        pid = me.id
-        return Promise.all([
-          apiFetch<Doctor[]>('/doctors'),
-          apiFetch<Record[]>(`/patients/${pid}/medical_records`),
-        ])
-      })
-      .then(([docs, records]) => {
-        const map: Record<number,string> = {}
-        docs.forEach(d => (map[d.id] = `${d.first_name} ${d.last_name}`))
-        setDoctors(map)
-        setRecs(records)
-      })
-      .catch(e => setError(e.message))
-  }, [])
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const patientProfile = await apiFetch<PatientProfileInfo>('/patients/me');
+        const patientId = patientProfile?._id || patientProfile?.id;
 
-  if (error)           return <p className="p-4 text-red-400">{error}</p>
-  if (recs === null)   return <p className="p-4 text-gray-300">Загрузка…</p>
-  if (recs.length === 0) return <p className="p-4 text-gray-300">У вас нет медкарт</p>
+        if (!patientId || typeof patientId !== 'string') {
+          throw new Error("Не удалось получить валидный профиль пациента для загрузки медкарт.");
+        }
+
+        // Загружаем медкарты. Бэкенд должен популировать информацию о докторе.
+        const recordsList = await apiFetch<MedicalRecordEntry[]>(`/patients/${patientId}/medical-records`);
+
+        // Загрузка списка всех врачей и создание doctorsMap больше не нужны,
+        // если информация о враче встроена в каждую медкарту.
+        /*
+        const doctorList = await apiFetch<DoctorInfo[]>('/doctors');
+        const doctorsNameMap: Record<string, string> = {};
+        doctorList.forEach(doc => {
+          const docIdKey = doc._id || doc.id?.toString();
+          if (docIdKey) {
+            doctorsNameMap[docIdKey] = `${doc.firstName} ${doc.lastName}`;
+          }
+        });
+        setDoctorsMap(doctorsNameMap);
+        */
+
+        setMedicalRecords(recordsList || []);
+      } catch (err: any) {
+        console.error("MyMedicalRecordsPage: Error during data fetching:", err);
+        setError(err.message || "Произошла ошибка при загрузке медкарт.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (isLoading) {
+    return <p className="p-4 text-center text-gray-300">Загрузка медицинских карт...</p>;
+  }
+  if (error) {
+    return <p className="p-4 text-center text-red-400">Ошибка: {error}</p>;
+  }
+  if (!medicalRecords || medicalRecords.length === 0) {
+    return <p className="p-4 text-center text-gray-300">У вас нет медицинских карт.</p>;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 p-8">
@@ -70,29 +125,34 @@ export default function MyMedicalRecordsPage() {
               </tr>
             </thead>
             <tbody>
-              {recs.map(r => (
-                <motion.tr
-                  key={r.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="border-t border-white/20 hover:bg-white/5"
-                >
-                  <td className="px-4 py-2 align-top text-gray-200">
-                    {new Date(r.visit_date).toLocaleDateString('ru-RU')}
-                  </td>
-                  <td className="px-4 py-2 align-top text-gray-200">
-                    {doctors[r.doctor_id] || `#${r.doctor_id}`}
-                  </td>
-                  <td className="px-4 py-2 align-top whitespace-pre-wrap text-gray-200">
-                    {r.notes}
-                  </td>
-                </motion.tr>
-              ))}
+              {medicalRecords.map(record => {
+                // Информация о враче теперь берется напрямую из record.doctor
+                const doctorInfo = record.doctor;
+                return (
+                  <motion.tr
+                    key={record._id || record.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="border-t border-white/20 hover:bg-white/5"
+                  >
+                    <td className="px-4 py-2 align-top text-gray-200">
+                      {new Date(record.visitDate).toLocaleDateString('ru-RU')}
+                    </td>
+                    <td className="px-4 py-2 align-top text-gray-200">
+                      {/* Используем поля из объекта doctorInfo */}
+                      {doctorInfo ? `${doctorInfo.firstName} ${doctorInfo.lastName}` : 'Врач не указан'}
+                    </td>
+                    <td className="px-4 py-2 align-top whitespace-pre-wrap text-gray-200">
+                      {record.notes}
+                    </td>
+                  </motion.tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </motion.div>
     </div>
-  )
+  );
 }

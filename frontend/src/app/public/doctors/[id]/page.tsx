@@ -1,94 +1,148 @@
-// src/app/public/doctors/page.tsx
+// src/app/public/doctors/[id]/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation' // useRouter для возможной навигации
 import { apiFetch } from '@/lib/api'
 import { motion } from 'framer-motion'
+import Link from 'next/link'
+import { // Предполагаем, что эти утилиты есть и доступны
+    getTokenFromStorage,
+    getRoleNameFromToken,
+    ROLE_NAMES,
+    RoleName
+} from '@/lib/authUtils'; // Адаптируйте путь, если нужно
 
-/* -------------------- типы -------------------- */
-type Doctor = {
-  id: number
-  first_name: string
-  last_name: string
-  specialty: string
+// Обновленный тип для данных врача
+type DoctorData = {
+  _id: string;
+  id?: string;
+  firstName: string;
+  lastName: string;
+  specialty: string;
 }
 
-export default function DoctorProfilePage() {
-  const { id } = useParams()
-  const docId = Number(id)
+// Тип для данных профиля пациента с /patients/me
+type PatientProfileInfo = {
+    _id: string;
+    id?: string;
+    // другие поля, если они есть
+}
 
-  /* ---------- auth ---------- */
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-  const payload = token ? JSON.parse(atob(token.split('.')[1])) : null
-  const roleId = payload?.role_id ?? 0
+export default function PublicDoctorProfilePage() { // Переименовал для ясности
+  const params = useParams();
+  const doctorIdParam = Array.isArray(params.id) ? params.id[0] : params.id; // ID врача из URL (строка)
+  const router = useRouter();
 
-  /* ---------- state ---------- */
-  const [patId, setPatId] = useState<number | null>(null)
-  const [doctor, setDoctor] = useState<Doctor | null>(null)
-  const [docErr, setDocErr] = useState<string | null>(null)
+  /* ---------- Auth State ---------- */
+  const [token, setToken] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<RoleName>(ROLE_NAMES.ANONYMOUS);
+  const [currentPatientProfileId, setCurrentPatientProfileId] = useState<string | null>(null); // ID профиля пациента
 
-  const today = new Date().toISOString().slice(0, 10)
-  const [date, setDate] = useState<string>(today)
-  const [slots, setSlots] = useState<string[]>([])
-  const [slotErr, setSlotErr] = useState<string | null>(null)
-  const [bookingSlot, setBookingSlot] = useState<string>('')
+  /* ---------- Page State ---------- */
+  const [doctor, setDoctor] = useState<DoctorData | null>(null);
+  const [doctorError, setDoctorError] = useState<string | null>(null);
+  const [isLoadingDoctor, setIsLoadingDoctor] = useState(true);
 
-  /* стили */
-  const glassCard = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg"
-  const glassInput = "bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-3 py-2"
-  const btnBase = "px-4 py-2 font-medium rounded-lg transition"
+  const today = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState<string>(today);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [selectedBookingSlot, setSelectedBookingSlot] = useState<string>('');
+  const [isBooking, setIsBooking] = useState(false);
+  const [isLoading, setIsLoading]   = useState(true); // Состояние загрузки
+
+  /* Стили */
+  const glassCard = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
+  const glassInput = "bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-3 py-2";
+  const btnBase = "px-4 py-2 font-medium rounded-lg transition";
   const slotBtn = (active: boolean) =>
-    `text-white ${btnBase} ${active ? "bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg" : "bg-white/20 hover:bg-white/30"}`
+    `text-white ${btnBase} ${active ? "bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg" : "bg-white/20 hover:bg-white/30"}`;
 
-  /* ---------- эффекты ---------- */
-  useEffect(() => {
-    if (!token || roleId !== 1) return
-    apiFetch<{ id: number }>('/patients/me')
-      .then(p => setPatId(p.id))
-      .catch(() => setPatId(null))
-  }, [token, roleId])
+  /* ---------- Эффекты ---------- */
 
+  // 1. Инициализация токена и роли пользователя, загрузка ID профиля пациента
   useEffect(() => {
-    apiFetch<Doctor[]>('/doctors')
-      .then(list => {
-        const d = list.find(x => x.id === docId)
-        if (!d) throw new Error('Врач не найден')
-        setDoctor(d)
+    const storedToken = getTokenFromStorage();
+    setToken(storedToken);
+    const roleName = getRoleNameFromToken(storedToken);
+    setCurrentUserRole(roleName);
+
+    if (storedToken && roleName === ROLE_NAMES.PATIENT) {
+      setIsLoading(true); // Для загрузки профиля пациента
+      apiFetch<PatientProfileInfo>('/patients/me')
+        .then(profile => {
+          setCurrentPatientProfileId(profile._id || profile.id || null);
+        })
+        .catch(() => {
+          console.error("Не удалось загрузить профиль пациента для записи.");
+          setCurrentPatientProfileId(null);
+        })
+        .finally(() => setIsLoading(true)); // Используем isLoadingDoctor для общего состояния загрузки страницы
+    }
+  }, []); // Пустой массив для выполнения один раз
+
+  // 2. Загрузка данных врача
+  useEffect(() => {
+    if (!doctorIdParam) {
+      setDoctorError("ID врача не указан.");
+      setIsLoadingDoctor(false);
+      return;
+    }
+    setIsLoadingDoctor(true);
+    apiFetch<DoctorData>(`/doctors/${doctorIdParam}`) // Запрос конкретного врача
+      .then(data => {
+        if (!data) throw new Error('Врач не найден');
+        setDoctor(data);
       })
-      .catch(e => setDocErr(e.message))
-  }, [docId])
+      .catch(e => setDoctorError(e.message))
+      .finally(() => setIsLoadingDoctor(false));
+  }, [doctorIdParam]);
 
+  // 3. Загрузка доступных слотов при изменении врача или даты
   useEffect(() => {
-    setSlots([])
-    setSlotErr(null)
-    apiFetch<string[]>(`/availability?doctor_id=${docId}&date=${date}`)
-      .then(setSlots)
-      .catch(e => setSlotErr(e.message))
-  }, [docId, date])
+    if (!doctorIdParam || !selectedDate) return;
 
-  const handleBook = async () => {
-    if (!bookingSlot || patId == null) return
+    setIsLoadingSlots(true);
+    setAvailableSlots([]); // Очищаем предыдущие слоты
+    setSlotsError(null);
+    // URL должен быть /api/doctors/:doctorId/availability?date=YYYY-MM-DD
+    apiFetch<string[]>(`/doctors/${doctorIdParam}/availability?date=${selectedDate}`)
+      .then(setAvailableSlots)
+      .catch(e => setSlotsError(e.message))
+      .finally(() => setIsLoadingSlots(false));
+  }, [doctorIdParam, selectedDate]);
+
+  const handleBookAppointment = async () => {
+    if (!selectedBookingSlot || !currentPatientProfileId || !doctor) return;
+    setIsBooking(true);
     try {
-      await apiFetch('/appointments', {
+      await apiFetch('/appointments', { // Бэкенд ожидает doctorId, patientId, apptTime
         method: 'POST',
         body: JSON.stringify({
-          doctor_id: docId,
-          patient_id: patId,
-          appt_time: `${date}T${bookingSlot}:00Z`,
+          doctorId: doctor._id || doctor.id, // было doctor_id
+          patientId: currentPatientProfileId,   // было patient_id
+          apptTime: `${selectedDate}T${selectedBookingSlot}:00Z`, // было appt_time
         }),
-      })
-      alert('Приём успешно забронирован')
-      const fresh = await apiFetch<string[]>(`/availability?doctor_id=${docId}&date=${date}`)
-      setSlots(fresh)
-      setBookingSlot('')
+      });
+      alert('Приём успешно забронирован!');
+      // Обновляем слоты после бронирования
+      setIsLoadingSlots(true);
+      const freshSlots = await apiFetch<string[]>(`/doctors/${doctorIdParam}/availability?date=${selectedDate}`);
+      setAvailableSlots(freshSlots);
+      setSelectedBookingSlot('');
     } catch (e: any) {
-      alert('Ошибка при бронировании: ' + e.message)
+      alert('Ошибка при бронировании: ' + e.message);
+    } finally {
+      setIsBooking(false);
+      setIsLoadingSlots(false);
     }
-  }
+  };
 
-  if (docErr) return <p className="p-4 text-red-600">Ошибка: {docErr}</p>
-  if (!doctor) return <p className="p-4 text-white">Загрузка…</p>
+  if (isLoadingDoctor) return <p className="p-8 text-center text-white">Загрузка данных врача...</p>;
+  if (doctorError) return <p className="p-8 text-center text-red-600">Ошибка: {doctorError}</p>;
+  if (!doctor) return <p className="p-8 text-center text-white">Информация о враче не найдена.</p>;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 p-8">
@@ -98,69 +152,76 @@ export default function DoctorProfilePage() {
         transition={{ duration: 0.5 }}
         className={`max-w-2xl mx-auto ${glassCard} p-8 space-y-6 text-white`}
       >
-        {/* Заголовок */}
         <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
-          {doctor.first_name} {doctor.last_name}
+          {doctor.firstName} {doctor.lastName} {/* было first_name, last_name */}
         </h1>
         <p className="inline-block px-3 py-1 rounded-lg bg-white/20 backdrop-blur-sm text-sm font-medium text-gray-100">
           {doctor.specialty}
         </p>
 
-        {/* Выбор даты */}
         <div className="space-y-1">
-          <label className="block text-sm font-medium">Дата приёма:</label>
+          <label htmlFor="appointmentDate" className="block text-sm font-medium">Дата приёма:</label>
           <input
+            id="appointmentDate"
             type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
             className={glassInput}
+            min={today} // Нельзя выбрать прошедшую дату
           />
         </div>
 
-        {/* Слоты */}
         <div>
-          {slotErr && <p className="text-red-400 mb-2">Не удалось загрузить слоты: {slotErr}</p>}
-          <div className="grid grid-cols-3 gap-3">
-            {slots.length === 0 ? (
-              <span className="col-span-3 text-gray-400">Нет свободных слотов</span>
-            ) : (
-              slots.map(t => (
+          <h3 className="text-lg font-medium mb-2">Свободные слоты:</h3>
+          {isLoadingSlots && <p className="text-gray-400">Загрузка слотов...</p>}
+          {slotsError && <p className="text-red-400 mb-2">Не удалось загрузить слоты: {slotsError}</p>}
+          {!isLoadingSlots && !slotsError && availableSlots.length === 0 && (
+            <span className="col-span-3 text-gray-400">Нет свободных слотов на выбранную дату.</span>
+          )}
+          {!isLoadingSlots && !slotsError && availableSlots.length > 0 && (
+             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              {availableSlots.map(timeSlot => (
                 <button
-                  key={t}
-                  onClick={() => setBookingSlot(t)}
-                  className={slotBtn(bookingSlot === t)}
+                  key={timeSlot}
+                  onClick={() => setSelectedBookingSlot(timeSlot)}
+                  className={slotBtn(selectedBookingSlot === timeSlot)}
                 >
-                  {t}
+                  {timeSlot}
                 </button>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Бронирование */}
         {!token && (
-          <a href="/public/login" className="text-indigo-300 hover:underline">
+          <Link href="/public/login" className="text-indigo-300 hover:underline block text-center pt-4">
             Войдите, чтобы записаться
-          </a>
+          </Link>
         )}
-        {token && roleId !== 1 && (
-          <p className="text-gray-300">Запись доступна только пациентам</p>
+        {token && currentUserRole !== ROLE_NAMES.PATIENT && (
+          <p className="text-gray-300 text-center pt-4">Запись доступна только пациентам.</p>
         )}
-        {token && roleId === 1 && (
+        {token && currentUserRole === ROLE_NAMES.PATIENT && (
           <button
-            disabled={!bookingSlot || patId == null}
-            onClick={handleBook}
-            className={`${btnBase} ${
-              bookingSlot && patId
+            onClick={handleBookAppointment}
+            disabled={!selectedBookingSlot || !currentPatientProfileId || isBooking || isLoadingSlots}
+            className={`${btnBase} w-full mt-4 ${
+              selectedBookingSlot && currentPatientProfileId
                 ? 'bg-gradient-to-r from-green-400 to-teal-400 text-white hover:from-teal-400 hover:to-green-400'
                 : 'bg-gray-500 text-gray-300 cursor-not-allowed'
             }`}
           >
-            {patId
-              ? `Записаться на ${bookingSlot}`
-              : 'Загрузка профиля…'}
+            {isBooking ? 'Бронируем...' : 
+             !currentPatientProfileId ? 'Загрузка профиля для записи...' : 
+             selectedBookingSlot ? `Записаться на ${selectedBookingSlot}` : 'Выберите слот'}
           </button>
         )}
+         <button
+            onClick={() => router.back()}
+            className="w-full mt-4 text-indigo-300 hover:underline"
+          >
+            &larr; К списку врачей
+          </button>
       </motion.div>
     </div>
   )

@@ -1,65 +1,91 @@
 // server/routes/patientRoutes.ts
-import { Router } from 'express';
-import { upsertMyPatientProfile, getMyPatientProfile, getAllPatients } from '../controllers/patientController';
-import { 
-    assignDoctorToPatient, 
-    unassignDoctorFromPatient,
-    getAssignedDoctorsForPatient
-} from '../controllers/patientDoctorController';
-import { getPatientAppointments } from '../controllers/appointmentController';
-import { getMedicalRecordsByPatient } from '../controllers/medicalRecordController'; // <--- Импортируем
-import { protect } from '../middleware/authMiddleware';
-import { authorize } from '../middleware/roleMiddleware';
+import { Router } from "express";
+import {
+  upsertMyPatientProfile,
+  getMyPatientProfile,
+  getAllPatients,
+  deletePatientById,
+  getPatientById,
+} from "../controllers/patientController";
+import {
+  assignDoctorToPatient,
+  unassignDoctorFromPatient,
+  getAssignedDoctorsForPatient,
+} from "../controllers/patientDoctorController";
+import { getPatientAppointments } from "../controllers/appointmentController";
+import { getMedicalRecordsByPatient } from "../controllers/medicalRecordController";
+import { protect } from "../middleware/authMiddleware";
+import { authorize } from "../middleware/roleMiddleware";
 
 const router = Router();
 
-console.log('[PatientRoutes] Файл patientRoutes.ts ЗАГРУЖЕН, роутер создан.');
+console.log("[PatientRoutes] Файл patientRoutes.ts ЗАГРУЖЕН, роутер создан.");
 
-router.route('/me')
-  .post(protect, authorize(['Patient', 'Admin', 'SuperAdmin']), upsertMyPatientProfile)
-  .get(protect, authorize(['Patient', 'Admin', 'SuperAdmin']), getMyPatientProfile);
-
-router.route('/')
-  .get(protect, authorize(['Admin', 'SuperAdmin']), getAllPatients);
-
-router.get(
-    '/:patientId/appointments',
+// 1. Самый специфичный маршрут - /me
+router
+  .route("/me")
+  .get(
     protect,
-    authorize(['Patient', 'Doctor', 'Admin', 'SuperAdmin']), // Уточнил права, пациент тоже может свои смотреть так
-    getPatientAppointments
-);
-
-// Новый маршрут для получения медицинских записей конкретного пациента
-// GET /api/patients/:patientId/medical-records
-router.get(
-    '/:patientId/medical-records',
+    authorize(["Patient", "Admin", "SuperAdmin"]),
+    getMyPatientProfile
+  )
+  .put(
     protect,
-    // Права доступа: Пациент (свои), Врач (пока все, потом ограничить), Admin, SuperAdmin
-    authorize(['Patient', 'Doctor', 'Admin', 'SuperAdmin']),
-    getMedicalRecordsByPatient
-);
+    authorize(["Patient", "Admin", "SuperAdmin"]),
+    upsertMyPatientProfile
+  );
 
+// 2. Маршрут для корневого пути /api/patients/
+router
+  .route("/")
+  .get(protect, authorize(["Admin", "SuperAdmin"]), getAllPatients);
+
+// 3. Маршруты с двумя параметрами или очень специфичными суффиксами
 router.post(
-    '/:patientId/assign-doctor/:doctorId',
-    protect,
-    authorize(['Admin', 'SuperAdmin']),
-    assignDoctorToPatient
+  "/:patientId/assign-doctor/:doctorId",
+  protect,
+  authorize(["Admin", "SuperAdmin"]),
+  assignDoctorToPatient
 );
 
-// DELETE /api/patients/:patientId/assign-doctor/:doctorId
 router.delete(
-    '/:patientId/assign-doctor/:doctorId',
-    protect,
-    authorize(['Admin', 'SuperAdmin']),
-    unassignDoctorFromPatient
+  "/:patientId/assign-doctor/:doctorId",
+  protect,
+  authorize(["Admin", "SuperAdmin"]),
+  unassignDoctorFromPatient
 );
 
-// GET /api/patients/:patientId/doctors
+// 4. Маршруты с одним параметром и специфичными суффиксами
 router.get(
-    '/:patientId/doctors',
-    protect,
-    authorize(['Patient', 'Admin', 'SuperAdmin', 'Doctor']), // Пациент свой, Доктор своих пациентов (доп. логика в контроллере)
-    getAssignedDoctorsForPatient
+  "/:patientId/appointments",
+  protect,
+  authorize(["Patient", "Doctor", "Admin", "SuperAdmin"]),
+  getPatientAppointments
 );
+
+router.get(
+  "/:patientId/medical-records",
+  protect,
+  authorize(["Patient", "Doctor", "Admin", "SuperAdmin"]),
+  getMedicalRecordsByPatient
+);
+
+router.get(
+  "/:patientId/doctors",
+  protect,
+  authorize(["Patient", "Admin", "SuperAdmin", "Doctor"]),
+  getAssignedDoctorsForPatient
+);
+
+// 5. Более общие маршруты с одним параметром (/:id) должны идти в конце.
+// Если у вас есть GET /:id и DELETE /:id, их можно сгруппировать.
+router
+  .route("/:id")
+  .get(protect, authorize(["Doctor", "Admin", "SuperAdmin"]), getPatientById) // Врач может смотреть пациентов (нужна доп. логика в контроллере для "своих"), админ - любых
+  .delete(
+    protect,
+    authorize(["Admin", "SuperAdmin"]),
+    deletePatientById
+  );
 
 export default router;

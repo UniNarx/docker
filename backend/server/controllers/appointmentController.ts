@@ -4,7 +4,7 @@ import Appointment, { IAppointment, AppointmentStatus } from '../models/Appointm
 import Doctor, { IDoctor } from '../models/Doctor';
 import Patient, { IPatient } from '../models/Patient';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
-import { isValidObjectId } from 'mongoose';
+import mongoose, { isValidObjectId, Types } from 'mongoose'; // Добавили Types
 
 
 // @desc    Создать новую запись на прием
@@ -13,7 +13,7 @@ import { isValidObjectId } from 'mongoose';
 export const createAppointment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   console.log('[AppointmentController] createAppointment hit. User role:', req.user?.roleName);
   try {
-    const { doctorId, patientId, apptTime } = req.body; // patientId может быть опциональным, если пациент создает для себя
+    const { doctorId, patientId, apptTime } = req.body; // Ожидаем camelCase
     const requestingUserId = req.user?.id;
     const requestingUserRole = req.user?.roleName;
 
@@ -21,7 +21,6 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
       res.status(400).json({ message: 'ID врача и время приема обязательны' });
       return;
     }
-
     if (!isValidObjectId(doctorId)) {
         res.status(400).json({ message: 'Некорректный ID врача' });
         return;
@@ -33,7 +32,6 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
         return;
     }
 
-    // Проверяем, существует ли врач
     const doctorExists = await Doctor.findById(doctorId);
     if (!doctorExists) {
       res.status(404).json({ message: 'Врач не найден' });
@@ -42,16 +40,14 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
 
     let finalPatientId = patientId;
 
-    // Если пациент создает для себя и не передает patientId
     if (requestingUserRole === 'Patient' && !patientId) {
       const patientProfile = await Patient.findOne({ user: requestingUserId });
       if (!patientProfile) {
-        res.status(404).json({ message: 'Профиль пациента для текущего пользователя не найден. Пожалуйста, создайте его.' });
+        res.status(404).json({ message: 'Профиль пациента для текущего пользователя не найден.' });
         return;
       }
       finalPatientId = patientProfile._id.toString();
     } else if (['Admin', 'SuperAdmin'].includes(requestingUserRole!) && patientId) {
-        // Админ может указать patientId
         if (!isValidObjectId(patientId)) {
             res.status(400).json({ message: 'Некорректный ID пациента' });
             return;
@@ -63,24 +59,21 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
         }
         finalPatientId = patientId;
     } else if (requestingUserRole === 'Patient' && patientId) {
-        // Пациент пытается создать запись для другого пациента - запрещено
         const patientProfile = await Patient.findOne({ user: requestingUserId });
         if (!patientProfile || patientProfile._id.toString() !== patientId) {
             res.status(403).json({ message: 'Пациенты могут создавать записи только для себя.' });
             return;
         }
-        finalPatientId = patientId; // он же и есть patientProfile._id
+        finalPatientId = patientId;
     } else {
-        res.status(400).json({ message: 'ID пациента не указан или недостаточно прав для указания ID пациента' });
+        res.status(400).json({ message: 'ID пациента не указан или недостаточно прав' });
         return;
     }
     
-    // Проверка на конфликт времени у врача (простая)
-    // В реальном приложении здесь должна быть более сложная логика проверки доступности слотов
     const existingAppointmentForDoctor = await Appointment.findOne({
-        doctor: doctorId,
+        doctor: new Types.ObjectId(doctorId), // Используем new Types.ObjectId для явного преобразования
         apptTime: appointmentTime,
-        status: { $ne: AppointmentStatus.CANCELLED } // Не считаем отмененные
+        status: { $ne: AppointmentStatus.CANCELLED }
     });
 
     if (existingAppointmentForDoctor) {
@@ -89,21 +82,164 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
     }
 
     const appointment = await Appointment.create({
-      doctor: doctorId,
-      patient: finalPatientId,
+      doctor: new Types.ObjectId(doctorId),
+      patient: new Types.ObjectId(finalPatientId),
       apptTime: appointmentTime,
-      // status по умолчанию 'scheduled' из модели
     });
+
+    // --- НОВОЕ: Автоматическая привязка пациента к врачу (и наоборот) ---
+    try {
+        const patientToUpdate = await Patient.findById(finalPatientId);
+        const doctorToUpdate = await Doctor.findById(doctorId); // doctorExists уже загружен, можно использовать его
+
+        if (patientToUpdate && doctorToUpdate) {
+            // Добавляем ID врача в массив assignedDoctors пациента, если его там еще нет
+            if (!patientToUpdate.assignedDoctors?.find(docId => docId.equals(doctorToUpdate._id))) {
+                patientToUpdate.assignedDoctors = patientToUpdate.assignedDoctors || [];
+                patientToUpdate.assignedDoctors.push(doctorToUpdate._id);
+                await patientToUpdate.save();
+                console.log(`[AppointmentController] Врач ${doctorToUpdate._id} прикреплен к пациенту ${patientToUpdate._id}`);
+            }
+
+            // Добавляем ID пациента в массив assignedPatients врача, если его там еще нет
+            if (!doctorToUpdate.assignedPatients?.find(patId => patId.equals(patientToUpdate._id))) {
+                doctorToUpdate.assignedPatients = doctorToUpdate.assignedPatients || [];
+                doctorToUpdate.assignedPatients.push(patientToUpdate._id);
+                await doctorToUpdate.save();
+                console.log(`[AppointmentController] Пациент ${patientToUpdate._id} прикреплен к врачу ${doctorToUpdate._id}`);
+            }
+        } else {
+            if (!patientToUpdate) console.warn(`[AppointmentController] Пациент с ID ${finalPatientId} не найден для обновления связей.`);
+            if (!doctorToUpdate) console.warn(`[AppointmentController] Врач с ID ${doctorId} не найден для обновления связей (используйте doctorExists).`);
+        }
+    } catch (bindingError: any) {
+        console.error('[AppointmentController] Ошибка при автоматической привязке врача и пациента:', bindingError);
+        // Не прерываем основной процесс создания записи, но логируем ошибку привязки
+    }
+    // --- КОНЕЦ НОВОГО ---
 
     console.log(`[AppointmentController] Appointment created with ID: ${appointment._id}`);
     res.status(201).json(appointment);
 
   } catch (error: any) {
     console.error('[AppointmentController] Ошибка в createAppointment:', error);
-    res.status(500).json({ message: 'Ошибка сервера при создании записи на прием' });
+    // Проверяем, был ли уже отправлен ответ, прежде чем пытаться отправить снова
+    if (!res.headersSent) {
+        if (error.name === 'ValidationError') {
+            res.status(400).json({ message: 'Ошибка валидации: ' + error.message });
+        } else {
+            res.status(500).json({ message: 'Ошибка сервера при создании записи на прием' });
+        }
+    }
+  }
+};
+export const getAllAppointmentsForAdmin = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  console.log('[AppointmentController] getAllAppointmentsForAdmin hit by Admin/SuperAdmin');
+  try {
+    const appointments = await Appointment.find({}) // Найти все
+      .populate<{ doctor: Pick<IDoctor, '_id' | 'id' | 'firstName' | 'lastName'> }>({
+          path: 'doctor',
+          select: 'firstName lastName _id id' // Популируем нужные поля врача
+      })
+      .populate<{ patient: Pick<IPatient, '_id' | 'id' | 'firstName' | 'lastName'> }>({
+          path: 'patient',
+          select: 'firstName lastName _id id' // Популируем нужные поля пациента
+      })
+      .sort({ apptTime: 'desc' }); // Например, сначала самые новые
+
+    res.status(200).json(appointments);
+  } catch (error: any) {
+    console.error('[AppointmentController] Ошибка в getAllAppointmentsForAdmin:', error);
+    res.status(500).json({ message: 'Ошибка сервера при получении всех записей на прием' });
   }
 };
 
+export const updateAppointmentById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const appointmentId = req.params.id;
+  // Ожидаем camelCase от фронтенда
+  const { doctorId, patientId, apptTime, status } = req.body;
+
+  if (!isValidObjectId(appointmentId)) {
+    res.status(400).json({ message: 'Некорректный ID записи на приём' });
+    return;
+  }
+
+  // Валидация входных данных
+  if (!doctorId || !patientId || !apptTime) {
+    res.status(400).json({ message: 'ID врача, ID пациента и время приёма обязательны' });
+    return;
+  }
+  if (!isValidObjectId(doctorId) || !isValidObjectId(patientId)) {
+    res.status(400).json({ message: 'Некорректный ID врача или пациента' });
+    return;
+  }
+  const appointmentTimeDate = new Date(apptTime);
+  if (isNaN(appointmentTimeDate.getTime())) {
+    res.status(400).json({ message: 'Некорректный формат времени приёма' });
+    return;
+  }
+  // Валидация статуса, если он передается
+  if (status && !Object.values(AppointmentStatus).includes(status as AppointmentStatus)) {
+    res.status(400).json({ message: `Некорректный статус. Допустимые: ${Object.values(AppointmentStatus).join(', ')}` });
+    return;
+  }
+
+  try {
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      res.status(404).json({ message: 'Запись на приём не найдена' });
+      return;
+    }
+
+    // Проверка на существование врача и пациента (опционально, но рекомендуется)
+    const doctorExists = await Doctor.findById(doctorId);
+    const patientExists = await Patient.findById(patientId);
+    if (!doctorExists) {
+        res.status(404).json({ message: `Врач с ID ${doctorId} не найден.` });
+        return;
+    }
+    if (!patientExists) {
+        res.status(404).json({ message: `Пациент с ID ${patientId} не найден.` });
+        return;
+    }
+
+    // TODO: Проверка на конфликт времени для нового врача/времени, если они изменились
+
+    appointment.doctor = new Types.ObjectId(doctorId);
+    appointment.patient = new Types.ObjectId(patientId);
+    appointment.apptTime = appointmentTimeDate;
+    if (status) {
+      appointment.status = status as AppointmentStatus;
+    }
+
+    const updatedAppointment = await appointment.save();
+    res.status(200).json(updatedAppointment);
+  } catch (error: any) {
+    console.error(`[AppointmentController] Ошибка в updateAppointmentById (ID: ${appointmentId}):`, error);
+    res.status(500).json({ message: 'Ошибка сервера при обновлении записи' });
+  }
+};
+export const deleteAppointmentById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const appointmentId = req.params.id;
+  console.log(`[AppointmentController] deleteAppointmentById hit. Appointment ID: ${appointmentId}`);
+
+  if (!isValidObjectId(appointmentId)) {
+    res.status(400).json({ message: 'Некорректный ID записи' });
+    return;
+  }
+  try {
+    const appointment = await Appointment.findByIdAndDelete(appointmentId);
+    if (!appointment) {
+      res.status(404).json({ message: 'Запись на прием не найдена' });
+      return;
+    }
+    // Здесь можно добавить логику отвязки от пациента/врача, если это не делается при создании
+    res.status(200).json({ message: 'Запись на прием успешно удалена' });
+  } catch (error: any) {
+    console.error(`[AppointmentController] Ошибка в deleteAppointmentById (ID: ${appointmentId}):`, error);
+    res.status(500).json({ message: 'Ошибка сервера при удалении записи' });
+  }
+};
 // @desc    Получить записи на прием для конкретного пациента
 // @route   GET /api/patients/:patientId/appointments (для админа/врача)
 // @route   GET /api/appointments/my (для залогиненного пациента)
@@ -161,12 +297,15 @@ export const getPatientAppointments = async (req: AuthenticatedRequest, res: Res
 export const getDoctorAppointments = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const requestingUserId = req.user?.id;
-    const requestingUserRole = req.user?.roleName;
+    const requestingUserRole = req.user?.roleName; // Уже должно быть из authMiddleware
     let doctorProfileIdForQuery: string | undefined;
 
-    if (req.params.doctorId) { // Если ID врача указан в URL (например, /api/doctors/:doctorId/appointments)
+    // Эта логика определяет doctorProfileIdForQuery на основе роли и req.params.doctorId
+    // или req.user.id для /doctor/me
+    // (как мы уже делали ранее)
+    if (req.params.doctorId) {
+      // Логика для /api/doctors/:doctorId/appointments (если используется)
       if (!['Admin', 'SuperAdmin', 'Doctor'].includes(requestingUserRole!)) {
-        // Только админ, суперадмин или сам врач могут смотреть расписание
         res.status(403).json({ message: 'Недостаточно прав для просмотра записей этого врача' });
         return;
       }
@@ -174,18 +313,25 @@ export const getDoctorAppointments = async (req: AuthenticatedRequest, res: Resp
         res.status(400).json({ message: 'Некорректный ID врача в URL' });
         return;
       }
-      // Если это врач, и он запрашивает расписание другого врача (не себя) - это может быть ограничено
-      // Пока что разрешим админам/суперадминам смотреть любого, а врачу - любого (можно доработать).
+      const doctorExists = await Doctor.findById(req.params.doctorId);
+      if (!doctorExists) {
+          res.status(404).json({ message: `Врач с ID ${req.params.doctorId} не найден.` });
+          return;
+      }
+      // Если админ или суперадмин смотрят, или врач смотрит себя
+      if (requestingUserRole === 'Doctor' && doctorExists.user.toString() !== requestingUserId) {
+          res.status(403).json({ message: 'Врачи могут просматривать только свои записи.' });
+          return;
+      }
       doctorProfileIdForQuery = req.params.doctorId;
-
     } else { // Подразумевается маршрут /api/appointments/doctor/me (для текущего врача)
       if (requestingUserRole !== 'Doctor') {
-        res.status(400).json({ message: 'Этот маршрут предназначен только для врачей для просмотра своего расписания.' });
+        res.status(403).json({ message: 'Этот маршрут предназначен только для врачей для просмотра своего расписания.' });
         return;
       }
       const doctorProfile = await Doctor.findOne({ user: requestingUserId });
       if (!doctorProfile) {
-        res.status(404).json({ message: 'Профиль врача для текущего пользователя не найден. Зарегистрируйтесь как врач.' });
+        res.status(404).json({ message: 'Профиль врача для текущего пользователя не найден.' });
         return;
       }
       doctorProfileIdForQuery = doctorProfile._id.toString();
@@ -194,9 +340,11 @@ export const getDoctorAppointments = async (req: AuthenticatedRequest, res: Resp
     console.log(`[AppointmentController] getDoctorAppointments for doctor profile ID: ${doctorProfileIdForQuery}`);
 
     const appointments = await Appointment.find({ doctor: doctorProfileIdForQuery })
-      .populate('patient', 'firstName lastName') // Данные пациента
-      .populate('doctor', 'firstName lastName specialty') // Данные врача (может быть избыточно, если и так по ID врача ищем)
-      .sort({ apptTime: 'asc' }); // Сортируем по времени приема
+      .populate<{ patient: Pick<IPatient, '_id' | 'id' | 'firstName' | 'lastName'> }>({ // Уточняем тип для patient
+          path: 'patient',
+          select: 'firstName lastName _id id' // Загружаем нужные поля пациента
+      })
+      .sort({ apptTime: 'asc' });
 
     res.status(200).json(appointments);
 

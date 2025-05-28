@@ -1,84 +1,105 @@
 // src/app/dashboard/doctors/appointments/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
-import { apiFetch } from '@/lib/api'
-import { motion } from 'framer-motion'
+import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api';
+import { motion } from 'framer-motion';
+import {
+    getTokenFromStorage,
+    getDecodedToken,
+    DecodedJwtPayload,
+    ROLE_NAMES
+} from '@/lib/authUtils';
 
-type Appointment = {
-  id: number
-  doctor_id: number
-  patient_id: number
-  appt_time: string
-  status: string
-}
-type Patient = { id: number; first_name: string; last_name: string }
-type Doctor  = { id: number; user_id: number; first_name: string; last_name: string }
+// Обновленные типы
+type PatientInfoForAppointment = { // Информация о пациенте, приходящая с записью
+  _id: string;
+  id?: string;
+  firstName: string;
+  lastName: string;
+};
+
+type AppointmentData = {
+  _id: string;
+  id?: string;
+  doctorId: string;
+  patientId: string; // Остается ID, но теперь также есть объект patient
+  patient: PatientInfoForAppointment; // <--- ПОПУЛИРОВАННЫЕ ДАННЫЕ ПАЦИЕНТА
+  apptTime: string;
+  status: string;
+};
+
+// PatientData и DoctorData больше не нужны здесь, если вся инфо приходит с AppointmentData
 
 export default function DoctorAppointmentsPage() {
-  const [appts,    setAppts]    = useState<Appointment[]|null>(null)
-  const [patients, setPatients] = useState<Record<number,string>>({})
-  const [doctors,  setDoctors]  = useState<Record<number,string>>({})
-  const [error,    setError]    = useState<string|null>(null)
+  const [appointments, setAppointments] = useState<AppointmentData[] | null>(null);
+  // patientsMap больше не нужен, если данные пациента приходят с каждой записью
+  // const [patientsMap, setPatientsMap]   = useState<Record<string, string>>({});
+  const [error, setError]               = useState<string | null>(null);
+  const [isLoading, setIsLoading]       = useState(true);
 
-  /* — common styles — */
-  const glassCard   = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg"
-  const headerText  = "text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400"
-  const rowHover    = "hover:bg-white/5 transition-colors"
-  const btnCancel   = "px-3 py-1 rounded-lg font-medium transition bg-gradient-to-r from-red-500 to-pink-500 hover:from-pink-500 hover:to-red-500 text-white"
-  const btnComplete = "px-3 py-1 rounded-lg font-medium transition bg-gradient-to-r from-green-400 to-teal-400 hover:from-teal-400 hover:to-green-400 text-white"
+  /* — common styles (остаются без изменений) — */
+  const glassCard   = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
+  const headerText  = "text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400";
+  const rowHover    = "hover:bg-white/5 transition-colors";
+  const btnCancel   = "px-3 py-1 rounded-lg font-medium transition bg-gradient-to-r from-red-500 to-pink-500 hover:from-pink-500 hover:to-red-500 text-white disabled:opacity-50";
+  const btnComplete = "px-3 py-1 rounded-lg font-medium transition bg-gradient-to-r from-green-400 to-teal-400 hover:from-teal-400 hover:to-green-400 text-white disabled:opacity-50";
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
+    setIsLoading(true);
+    const token = getTokenFromStorage();
     if (!token) {
-      setError('Не авторизованы')
-      return
-    }
-    const { user_id, role_id } = JSON.parse(atob(token.split('.')[1]))
-    if (role_id !== 2) {
-      setError('Доступ только для врачей')
-      return
+      setError('Не авторизованы');
+      setIsLoading(false);
+      return;
     }
 
-    Promise.all([
-      apiFetch<Appointment[]>('/appointments'),
-      apiFetch<Patient[]>('/patients'),
-      apiFetch<Doctor[]>('/doctors'),
-    ])
-      .then(([all, pats, docs]) => {
-        const pmap: Record<number,string> = {}
-        pats.forEach(p => pmap[p.id] = `${p.first_name} ${p.last_name}`)
-        const dmap: Record<number,string> = {}
-        docs.forEach(d => dmap[d.id] = `${d.first_name} ${d.last_name}`)
+    const decodedToken = getDecodedToken(token);
+    if (!decodedToken || decodedToken.roleName !== ROLE_NAMES.DOCTOR) {
+      setError('Доступ только для врачей');
+      setIsLoading(false);
+      return;
+    }
 
-        setPatients(pmap)
-        setDoctors(dmap)
-
-        const me = docs.find(d => d.user_id === user_id)
-        if (!me) {
-          setError('Профиль врача не найден')
-          return
-        }
-        setAppts(all.filter(a => a.doctor_id === me.id))
+    // Врач запрашивает СВОИ записи через /api/appointments/doctor/me
+    // Бэкенд теперь должен популировать информацию о пациенте
+    apiFetch<AppointmentData[]>('/appointments/doctor/me')
+      .then(myAppointments => {
+        setAppointments(myAppointments || []);
       })
-      .catch(e => setError(e.message))
-  }, [])
+      .catch(e => {
+        console.error("Ошибка загрузки записей врача:", e);
+        setError(e.message || "Произошла ошибка");
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
 
-  const cancel = async (id: number) => {
-    if (!confirm('Отменить приём?')) return
-    await apiFetch(`/appointments/${id}/cancel`, { method: 'PATCH' })
-    setAppts(prev => prev?.map(a => a.id === id ? { ...a, status: 'cancelled' } : a) || null)
-  }
+  const updateAppointmentStatus = async (appointmentId: string, newStatus: 'cancelled' | 'completed') => {
+    if (!confirm(newStatus === 'cancelled' ? 'Отменить приём?' : 'Отметить как завершённый?')) return;
 
-  const complete = async (id: number) => {
-    if (!confirm('Отметить как завершённый?')) return
-    await apiFetch(`/appointments/${id}/complete`, { method: 'PATCH' })
-    setAppts(prev => prev?.map(a => a.id === id ? { ...a, status: 'completed' } : a) || null)
-  }
+    const originalAppointments = appointments ? [...appointments] : [];
 
-  if (error)     return <p className="p-6 text-red-400">{error}</p>
-  if (appts===null) return <p className="p-6 text-gray-300">Загрузка…</p>
-  if (!appts.length) return <p className="p-6 text-gray-300">У вас нет приёмов</p>
+    setAppointments(prev => prev?.map(a =>
+      (a._id || a.id) === appointmentId ? { ...a, status: newStatus, patient: a.patient } : a // Убедимся что patient не теряется
+    ) || null);
+
+    try {
+      await apiFetch(`/appointments/${appointmentId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (e: any) {
+      console.error(`Ошибка при обновлении статуса приёма ${appointmentId} на ${newStatus}:`, e);
+      alert('Ошибка при обновлении статуса: ' + e.message);
+      setAppointments(originalAppointments);
+    }
+  };
+
+  if (isLoading) return <p className="p-6 text-center text-gray-300">Загрузка ваших приёмов...</p>;
+  if (error) return <p className="p-6 text-center text-red-400">{error}</p>;
+  if (!appointments || appointments.length === 0) return <p className="p-6 text-center text-gray-300">У вас нет запланированных приёмов.</p>;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 p-8">
@@ -96,40 +117,49 @@ export default function DoctorAppointmentsPage() {
           <table className="w-full table-auto border-separate bg-white/10 rounded-lg">
             <thead>
               <tr className="text-left text-gray-300">
-                {['Дата / время','Пациент','Статус','Действия'].map(th => (
+                {['Дата / время', 'Пациент', 'Статус', 'Действия'].map(th => (
                   <th key={th} className="px-4 py-2">{th}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {appts.map(a => {
-                const dt = new Date(a.appt_time)
+              {appointments.map(appt => {
+                const appointmentDate = new Date(appt.apptTime);
+                const appointmentId = appt._id || appt.id;
+                const patientName = appt.patient ? `${appt.patient.firstName} ${appt.patient.lastName}` : `#${appt.patientId}`;
+
                 return (
-                  <tr key={a.id} className={`border-t border-white/20 ${rowHover}`}>
+                  <tr key={appointmentId} className={`border-t border-white/20 ${rowHover}`}>
                     <td className="px-4 py-3">
-                      {dt.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}
+                      {appointmentDate.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}
                     </td>
-                    <td className="px-4 py-3">{patients[a.patient_id] || `#${a.patient_id}`}</td>
-                    <td className="px-4 py-3 capitalize">{a.status}</td>
+                    <td className="px-4 py-3">{patientName}</td>
+                    <td className="px-4 py-3 capitalize">{appt.status}</td>
                     <td className="px-4 py-3 space-x-2">
-                      {a.status === 'scheduled' && (
+                      {appt.status === 'scheduled' && appointmentId && (
                         <>
-                          <button onClick={() => cancel(a.id)} className={btnCancel}>
+                          <button
+                            onClick={() => updateAppointmentStatus(appointmentId, 'cancelled')}
+                            className={btnCancel}
+                          >
                             Отменить
                           </button>
-                          <button onClick={() => complete(a.id)} className={btnComplete}>
+                          <button
+                            onClick={() => updateAppointmentStatus(appointmentId, 'completed')}
+                            className={btnComplete}
+                          >
                             Завершить
                           </button>
                         </>
                       )}
                     </td>
                   </tr>
-                )
+                );
               })}
             </tbody>
           </table>
         </div>
       </motion.div>
     </div>
-  )
+  );
 }

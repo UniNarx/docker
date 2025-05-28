@@ -6,7 +6,10 @@ import {
     cancelAppointment,
     getDoctorAppointments,
     getAppointmentById,      // <--- Импортируем новую функцию
-    updateAppointmentStatus  // <--- Импортируем новую функцию
+    updateAppointmentStatus,
+    getAllAppointmentsForAdmin,
+    deleteAppointmentById,
+    updateAppointmentById
 } from '../controllers/appointmentController';
 import { protect } from '../middleware/authMiddleware';
 import { authorize } from '../middleware/roleMiddleware';
@@ -34,6 +37,11 @@ router.patch('/:id/status', protect, authorize(['Doctor', 'Admin', 'SuperAdmin']
 // /api/appointments/:id/cancel
 // Этот маршрут также специфичен
 router.patch('/:id/cancel', protect, cancelAppointment); 
+router.get('/all-for-admin', protect, authorize(['Admin', 'SuperAdmin']), getAllAppointmentsForAdmin);
+router.route('/:id')
+    .get(protect, getAppointmentById)
+    .put(protect, authorize(['Admin', 'SuperAdmin']), updateAppointmentById) // Обновление всей записи
+    .delete(protect, authorize(['Admin', 'SuperAdmin']), deleteAppointmentById); // Удаление записи (если нужно)
 
 // /api/appointments/:id
 // Этот маршрут должен идти после более специфичных маршрутов с параметром :id, если такие есть для того же HTTP метода

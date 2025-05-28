@@ -1,53 +1,56 @@
 // components/NavBar.tsx
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation"; // Добавили useRouter
 import { useEffect, useState } from "react";
-
-const ROLE_IDS = {
-  PATIENT: "6836ec7ff5b12770e1c81b34",
-  DOCTOR:  "6836ec7ff5b12770e1c81b35",
-  ADMIN:   "6836ec7ff5b12770e1c81b36",
-  SUPER:   "6836ec7ff5b12770e1c81b37",
-};
-
-function getRoleFromToken(token: string): string | null {
-  try {
-    const payloadBase64 = token.split(".")[1];
-    if (!payloadBase64) return null;
-    const { roleId } = JSON.parse(atob(payloadBase64));
-    return roleId || null;
-  } catch {
-    return null;
-  }
-}
+import {
+    getRoleNameFromToken,
+    getTokenFromStorage,
+    removeTokenFromStorage,
+    ROLE_NAMES, // Импортируем имена ролей
+    RoleName,
+    saveTokenToStorage // Если нужно для логина из NavBar (хотя обычно логин на отдельной странице)
+} from "@/lib/authUtils"; // Путь к вашему файлу
 
 export default function NavBar() {
-  // храним roleId из токена, или null (аноним)
-  const [role, setRole] = useState<string | null>(null);
+  // Используем currentRoleName из вашего нового authUtils
+  const [currentRoleName, setCurrentRoleName] = useState<RoleName>(ROLE_NAMES.ANONYMOUS);
   const pathname = usePathname();
+  const router = useRouter(); // Для навигации после logout
 
-  // читаем токен и дергаем при событии 'token-changed'
-  const readToken = () => {
-    const token = localStorage.getItem("token");
-    setRole(token ? getRoleFromToken(token) : null);
+  // Функция для чтения токена и установки роли
+  const readTokenAndSetRole = () => {
+    const token = getTokenFromStorage();
+    const roleNameFromToken = getRoleNameFromToken(token);
+    setCurrentRoleName(roleNameFromToken);
+    console.log("NavBar: Role set to ->", roleNameFromToken); // Лог для отладки
   };
 
   useEffect(() => {
-    readToken();
-    window.addEventListener("token-changed", readToken);
-    return () => window.removeEventListener("token-changed", readToken);
-  }, []);
+    readTokenAndSetRole(); // Читаем при монтировании
+
+    // Обработчик кастомного события 'token-changed'
+    const handleTokenChange = (event: Event) => {
+      console.log("NavBar: Event 'token-changed' detected.", (event as CustomEvent).detail);
+      readTokenAndSetRole(); // Перечитываем токен и обновляем роль
+    };
+
+    window.addEventListener("token-changed", handleTokenChange);
+
+    // Очистка слушателя при размонтировании компонента
+    return () => {
+      window.removeEventListener("token-changed", handleTokenChange);
+    };
+  }, []); // Пустой массив зависимостей, чтобы эффект выполнился один раз при монтировании и очистился при размонтировании
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    // сообщаем NavBar, что токена больше нет
-    window.dispatchEvent(new Event("token-changed"));
-    // и уходим на логин
-    window.location.href = "/public/login";
+    removeTokenFromStorage(); // Удаляем токен и диспатчим событие (authUtils должен это делать)
+    // setCurrentRoleName(ROLE_NAMES.ANONYMOUS); // Сразу обновляем роль в UI
+    // router.push("/public/login"); // Используем Next.js router для навигации
+    // Перезагрузка страницы может быть более надежным способом сбросить все состояния, если есть сложности
+     window.location.href = "/public/login";
   };
 
-  // базовые классы и функция для under­line
   const linkClass = "relative px-2 py-1 font-medium text-gray-800 transition-transform duration-200 hover:scale-105";
   const fancyUnderline = (active: boolean) =>
     `after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-0.5 ${
@@ -56,7 +59,6 @@ export default function NavBar() {
         : "after:w-0"
     } after:transition-all after:duration-300`;
 
-  // обёртка, которая умеет подсвечивать активный линк
   const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
     const isActive = pathname === href;
     return (
@@ -68,17 +70,15 @@ export default function NavBar() {
     );
   };
 
-  // общая кнопка «Выйти»
   const LogoutBtn = (
     <button onClick={handleLogout} className={`${linkClass} text-red-500 hover:text-red-600`}>
       Выйти
     </button>
   );
 
-  // рендерим набор линков в зависимости от роли
   const renderLinks = () => {
-    if (!role) {
-      // аноним
+    // Теперь сравниваем с ROLE_NAMES
+    if (currentRoleName === ROLE_NAMES.ANONYMOUS || !currentRoleName) {
       return (
         <>
           <NavLink href="/public/doctors">Врачи</NavLink>
@@ -86,7 +86,7 @@ export default function NavBar() {
         </>
       );
     }
-    if (role === ROLE_IDS.PATIENT) {
+    if (currentRoleName === ROLE_NAMES.PATIENT) {
       return (
         <>
           <NavLink href="/public/doctors">Врачи</NavLink>
@@ -97,31 +97,52 @@ export default function NavBar() {
         </>
       );
     }
-    if (role === ROLE_IDS.DOCTOR) {
+    if (currentRoleName === ROLE_NAMES.DOCTOR) {
       return (
         <>
+          {/* Можно добавить ссылку на свой профиль врача, если он есть */}
           <NavLink href="/dashboard/doctors/patients">Пациенты</NavLink>
           <NavLink href="/dashboard/doctors/appointments">Приёмы</NavLink>
+          <NavLink href="/dashboard/doctors/profile">Профиль</NavLink> {/* Пример */}
           {LogoutBtn}
         </>
       );
     }
-    // ADMIN или SUPERADMIN
-    return (
-      <>
-        <NavLink href="/dashboard/doctors">Упр. врачи</NavLink>
-        <NavLink href="/dashboard/patients">Упр. пациенты</NavLink>
-        <NavLink href="/dashboard/appointments">Упр. приёмы</NavLink>
-        <NavLink href="/dashboard/profile">Профиль</NavLink>
-        {LogoutBtn}
-      </>
-    );
+    // ADMIN или SUPERADMIN (можно добавить более гранулярные проверки, если нужно)
+    if (currentRoleName === ROLE_NAMES.ADMIN || currentRoleName === ROLE_NAMES.SUPERADMIN) {
+      return (
+        <>
+          <NavLink href="/dashboard/doctors">Упр. врачи</NavLink>
+          <NavLink href="/dashboard/patients">Упр. пациенты</NavLink>
+          <NavLink href="/dashboard/appointments">Упр. приёмы</NavLink>
+          <NavLink href="/dashboard/profile">Профиль</NavLink> {/* У админов тоже есть свой профиль пользователя */}
+          {LogoutBtn}
+        </>
+      );
+    }
+    // На всякий случай, если роль какая-то неизвестная (не должно быть)
+    return <NavLink href="/public/login">Войти</NavLink>;
   };
+
+  // Определяем базовый href для логотипа
+  let logoHref = "/public/doctors"; // По умолчанию для анонима
+  if (currentRoleName && currentRoleName !== ROLE_NAMES.ANONYMOUS) {
+    // Если пользователь залогинен и это не аноним, можно направить его на соответствующий дашборд
+    // Это пример, можно сделать более сложную логику
+    if (currentRoleName === ROLE_NAMES.PATIENT) {
+        logoHref = "/dashboard/patients/appointments"; // или /public/doctors
+    } else if (currentRoleName === ROLE_NAMES.DOCTOR) {
+        logoHref = "/dashboard/doctors/appointments";
+    } else if (currentRoleName === ROLE_NAMES.ADMIN || currentRoleName === ROLE_NAMES.SUPERADMIN) {
+        logoHref = "/dashboard/profile"; // или /dashboard/doctors
+    }
+  }
+
 
   return (
     <nav className="fixed top-0 w-full bg-white/60 backdrop-blur-md shadow-md z-50">
       <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
-        <Link href="/public/doctors" className="text-2xl font-bold text-indigo-600">
+        <Link href={logoHref} className="text-2xl font-bold text-indigo-600">
           Docker<span className="text-purple-500">Med</span>
         </Link>
         <div className="flex space-x-6">{renderLinks()}</div>

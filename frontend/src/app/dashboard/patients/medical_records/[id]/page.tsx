@@ -23,7 +23,7 @@ export default function MedicalRecordPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    apiFetch<MedicalRecord>(`/medical_records/${mrId}`)
+    apiFetch<MedicalRecord>(`/medical-records/${mrId}`)
       .then(setRecord)
       .catch(e => setError(e.message))
   }, [mrId])

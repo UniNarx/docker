@@ -1,13 +1,15 @@
-// server/routes/authRoutes.ts
+// backend/server/routes/authRoutes.ts
 import { Router } from 'express';
-import { register, login } from '../controllers/authController';
+import { register, login, registerAdmin } from '../controllers/authController'; // Добавляем registerAdmin
+import { protect } from '../middleware/authMiddleware';
+import { authorize } from '../middleware/roleMiddleware';
 
 const router = Router();
 
-// POST /api/auth/register
 router.post('/register', register);
-
-// POST /api/auth/login
 router.post('/login', login);
+
+// Новый маршрут для создания пользователя с указанной ролью (только для SuperAdmin)
+router.post('/register-admin', protect, authorize(['SuperAdmin']), registerAdmin);
 
 export default router;
