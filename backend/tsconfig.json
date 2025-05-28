@@ -1,27 +1,29 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "target": "ES2020",                     // Современная версия JavaScript
+    "module": "CommonJS",                  // Важно: компилируем в CommonJS
+    "lib": ["ES2020"],                      // Библиотеки для серверной среды Node.js
+    "outDir": "./dist",                    // Папка для скомпилированных .js файлов
+    "rootDir": "./",                       // Корень ваших .ts файлов (где находится папка server)
+    "strict": true,                        // Включаем все строгие проверки типов
+    "esModuleInterop": true,               // Для лучшей совместимости между CommonJS и ES модулями
+    "skipLibCheck": true,                  // Пропускаем проверку типов для .d.ts файлов из node_modules
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",            // Стандартное разрешение модулей для Node.js/CommonJS
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": ["./src/*"]
+    "sourceMap": true,                     // Генерируем source maps для отладки
+    // "noEmit": false,                    // Убедитесь, что этой строки НЕТ или она false
+    "baseUrl": ".",                        // Опционально, если используете абсолютные пути от корня
+    "paths": {                             // Опционально, если используете алиасы путей
+        // Пример: "@server/*": ["server/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "server/**/*.ts", // Включаем все .ts файлы в папке server и ее подпапках
+    "*.ts"            // Включаем .ts файлы в корне проекта (если есть)
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

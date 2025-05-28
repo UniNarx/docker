@@ -3,63 +3,102 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import User from '../models/User';
 import Role, { IRole } from '../models/Role';
-import appConfig from '../config'; // Убедитесь, что импортирован, если нужен (для login)
+import Patient from '../models/Patient'; // <--- Добавить импорт
+import PatientProfile from '../models/PatientProfile'; // <--- Добавить импорт
+import appConfig from '../config/index';
 import jwt from 'jsonwebtoken';    // Убедитесь, что импортирован, если нужен (для login)
 import { JwtPayloadWithIds } from '../types/jwt';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
-  console.log('[Register API] Entered register function'); // Лог 1
   try {
     const { username, password } = req.body;
-    console.log(`[Register API] Received username: ${username}, password: ${password ? '***' : 'undefined'}`); // Лог 2
 
     if (!username || !password) {
+
       console.log('[Register API] Validation failed: username or password missing'); // Лог 3
+
       res.status(400).json({ message: 'Имя пользователя и пароль обязательны' });
-      return;
-    }
 
-    console.log(`[Register API] Looking for existing user: ${username}`); // Лог 4
+      return;
+
+    }
     const existingUser = await User.findOne({ username });
+     if (existingUser) {
 
-    if (existingUser) {
       console.log(`[Register API] User ${username} already exists.`); // Лог 5
+
       res.status(400).json({ message: 'Имя пользователя уже занято' });
+
       return;
+
     }
 
-    console.log(`[Register API] User ${username} not found, proceeding with registration.`); // Лог 6
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
-    console.log(`[Register API] Password hashed for ${username}.`); // Лог 7
-
-    console.log('[Register API] Looking for "Patient" role.'); // Лог 8
     const patientRole = await Role.findOne({ name: 'Patient' });
-
     if (!patientRole) {
+
       console.error('[Register API] CRITICAL: "Patient" role not found!'); // Лог 9
+
       res.status(500).json({ message: 'Ошибка сервера: роль по умолчанию не найдена' });
+
       return;
+
     }
-    console.log(`[Register API] "Patient" role found with ID: ${patientRole._id}`); // Лог 10
 
     const newUser = new User({
       username,
       passwordHash,
       role: patientRole._id,
     });
+    const savedUser = await newUser.save();
+    console.log(`[AuthController] User created with ID: ${savedUser._id}`);
 
-    console.log(`[Register API] Saving new user: ${username}`); // Лог 11
-    await newUser.save();
-    console.log(`[Register API] User ${username} saved successfully with ID: ${newUser._id}`); // Лог 12
+    // --- НОВОЕ: Создание связанной записи Patient ---
+    try {
+      const newPatientRecord = new Patient({
+        user: savedUser._id,
+        firstName: '', // Пустое, как в Go (или 'Имя' по умолчанию)
+        lastName: '',  // Пустое, как в Go (или 'Фамилия' по умолчанию)
+        dateOfBirth: new Date(), // Или null/undefined, если схема позволяет и не required
+                                  // В Go было time.Now(), но для DOB это не всегда логично.
+                                  // Лучше оставить поля, которые пользователь должен заполнить.
+                                  // Сделаем их необязательными в модели Patient на время, если нужно создать "пустой"
+                                  // Или потребуем их на этапе заполнения профиля.
+                                  // Сейчас firstName, lastName, dateOfBirth - required в модели Patient.
+                                  // Чтобы создать "пустой", нужно сделать их необязательными
+                                  // или передать дефолтные валидные значения.
+                                  // Давайте пока предположим, что они будут заполнены через /api/patients/me
+      });
+      // await newPatientRecord.save(); // Пока не сохраняем, чтобы не требовать обязательные поля
+      // console.log(`[AuthController] Empty Patient record created for User ID: ${savedUser._id}`);
+      // Вместо этого, пациент сам заполнит свой профиль через /api/patients/me
+    } catch (patientError) {
+      console.error('[AuthController] Ошибка при создании пустой записи Patient:', patientError);
+      // Здесь можно решить, является ли это критической ошибкой для регистрации
+    }
+
+    // --- НОВОЕ: Создание связанной записи PatientProfile ---
+    try {
+      const newPatientProfile = new PatientProfile({
+        user: savedUser._id,
+      firstName: '', // Теперь это должно быть нормально, если поле не strictly required или имеет default
+      lastName: '',  // Аналогично
+      dateOfBirth: new Date(),
+      });
+      await newPatientProfile.save();
+      console.log(`[AuthController] Empty PatientProfile created for User ID: ${savedUser._id}`);
+    } catch (profileError) {
+      console.error('[AuthController] Ошибка при создании PatientProfile:', profileError);
+    }
+    // --- КОНЕЦ НОВОГО ---
+
 
     res.status(201).json({
       message: 'Пользователь успешно зарегистрирован',
-      userId: newUser._id,
-      username: newUser.username,
+      userId: savedUser._id,
+      username: savedUser.username,
     });
-    console.log(`[Register API] Sent 201 response for ${username}.`); // Лог 13
-    return;
 
   } catch (error: any) { // Явно типизируем error как any для доступа к message
     console.error('[Register API] Error caught in register function:', error.message, error.stack); // Лог 14
@@ -72,6 +111,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 };
+
 
 // login функция остается как есть (убедитесь, что в ней тоже есть подробное логгирование и return;)
 export const login = async (req: Request, res: Response): Promise<void> => {

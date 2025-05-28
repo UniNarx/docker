@@ -1,5 +1,5 @@
 // lib/api.ts
-const API_URL = 'http://localhost:8080'
+const API_URL = 'http://localhost:8080/api'
 
 // lib/api.ts
 export async function apiFetch<T>(

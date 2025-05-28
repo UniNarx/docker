@@ -2,7 +2,7 @@
 import Role, { IRole } from '../models/Role';
 import User, { IUser } from '../models/User'; // Импортируем User и IUser
 import bcrypt from 'bcryptjs';
-import appConfig from '../config'; // Если вы захотите брать данные из конфига
+import appConfig from '../config/index'; // Если вы захотите брать данные из конфига
 
 const ROLES = ['Patient', 'Doctor', 'Admin', 'SuperAdmin'];
 

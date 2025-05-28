@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken'; // JwtPayload уже импортируется здесь
 import { Types } from 'mongoose'; // Импортируем Types
-import appConfig from '../config';
+import appConfig from '../config/index';
 import User, { IUser } from '../models/User';
 import Role, { IRole } from '../models/Role';
 import { JwtPayloadWithIds } from '../types/jwt'; // Наш кастомный тип
