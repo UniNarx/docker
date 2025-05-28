@@ -124,8 +124,7 @@ export default function CreateAdminPage() {
               {/* Убедитесь, что эти значения соответствуют именам ролей в вашей БД
                   и тому, что ожидает бэкенд ('Patient', 'Doctor', 'Administrator', 'SuperAdmin')
                   Ваш бэкенд seedRoles создает именно эти 4 роли. */}
-              <option value="Patient">Patient</option>
-              <option value="Doctor">Doctor</option>
+             
               <option value="Admin">Admin</option>
               <option value="SuperAdmin">SuperAdmin</option>
             </select>
