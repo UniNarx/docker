@@ -1,45 +1,45 @@
 // src/app/public/doctors/[id]/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation' // useRouter для возможной навигации
-import { apiFetch } from '@/lib/api'
-import { motion } from 'framer-motion'
-import Link from 'next/link'
-import { // Предполагаем, что эти утилиты есть и доступны
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image'; // <--- Импорт для Image
+import { apiFetch } from '@/lib/api';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import {
     getTokenFromStorage,
     getRoleNameFromToken,
     ROLE_NAMES,
     RoleName
-} from '@/lib/authUtils'; // Адаптируйте путь, если нужно
+} from '@/lib/authUtils';
 
-// Обновленный тип для данных врача
+// Обновленный тип для данных врача, включая avatarUrl
 type DoctorData = {
   _id: string;
   id?: string;
   firstName: string;
   lastName: string;
   specialty: string;
-}
+  avatarUrl?: string; // <--- Добавлено поле для аватарки
+  description?: string;
 
-// Тип для данных профиля пациента с /patients/me
+};
+
 type PatientProfileInfo = {
     _id: string;
     id?: string;
-    // другие поля, если они есть
-}
+};
 
-export default function PublicDoctorProfilePage() { // Переименовал для ясности
+export default function PublicDoctorProfilePage() {
   const params = useParams();
-  const doctorIdParam = Array.isArray(params.id) ? params.id[0] : params.id; // ID врача из URL (строка)
+  const doctorIdParam = Array.isArray(params.id) ? params.id[0] : params.id as string;
   const router = useRouter();
 
-  /* ---------- Auth State ---------- */
   const [token, setToken] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<RoleName>(ROLE_NAMES.ANONYMOUS);
-  const [currentPatientProfileId, setCurrentPatientProfileId] = useState<string | null>(null); // ID профиля пациента
-
-  /* ---------- Page State ---------- */
+  const [currentPatientProfileId, setCurrentPatientProfileId] = useState<string | null>(null);
+  
   const [doctor, setDoctor] = useState<DoctorData | null>(null);
   const [doctorError, setDoctorError] = useState<string | null>(null);
   const [isLoadingDoctor, setIsLoadingDoctor] = useState(true);
@@ -51,18 +51,14 @@ export default function PublicDoctorProfilePage() { // Переименовал 
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [selectedBookingSlot, setSelectedBookingSlot] = useState<string>('');
   const [isBooking, setIsBooking] = useState(false);
-  const [isLoading, setIsLoading]   = useState(true); // Состояние загрузки
+  // const [isLoading, setIsLoading]   = useState(true); // Уже есть isLoadingDoctor
 
-  /* Стили */
   const glassCard = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
   const glassInput = "bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-3 py-2";
   const btnBase = "px-4 py-2 font-medium rounded-lg transition";
   const slotBtn = (active: boolean) =>
     `text-white ${btnBase} ${active ? "bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg" : "bg-white/20 hover:bg-white/30"}`;
 
-  /* ---------- Эффекты ---------- */
-
-  // 1. Инициализация токена и роли пользователя, загрузка ID профиля пациента
   useEffect(() => {
     const storedToken = getTokenFromStorage();
     setToken(storedToken);
@@ -70,7 +66,7 @@ export default function PublicDoctorProfilePage() { // Переименовал 
     setCurrentUserRole(roleName);
 
     if (storedToken && roleName === ROLE_NAMES.PATIENT) {
-      setIsLoading(true); // Для загрузки профиля пациента
+      // setIsLoading(true); // Используем isLoadingDoctor или отдельный флаг
       apiFetch<PatientProfileInfo>('/patients/me')
         .then(profile => {
           setCurrentPatientProfileId(profile._id || profile.id || null);
@@ -78,12 +74,11 @@ export default function PublicDoctorProfilePage() { // Переименовал 
         .catch(() => {
           console.error("Не удалось загрузить профиль пациента для записи.");
           setCurrentPatientProfileId(null);
-        })
-        .finally(() => setIsLoading(true)); // Используем isLoadingDoctor для общего состояния загрузки страницы
+        });
+        // .finally(() => setIsLoading(false)); // Управляется isLoadingDoctor
     }
-  }, []); // Пустой массив для выполнения один раз
+  }, []);
 
-  // 2. Загрузка данных врача
   useEffect(() => {
     if (!doctorIdParam) {
       setDoctorError("ID врача не указан.");
@@ -91,7 +86,8 @@ export default function PublicDoctorProfilePage() { // Переименовал 
       return;
     }
     setIsLoadingDoctor(true);
-    apiFetch<DoctorData>(`/doctors/${doctorIdParam}`) // Запрос конкретного врача
+    setDoctorError(null); // Сбрасываем ошибку перед новым запросом
+    apiFetch<DoctorData>(`/doctors/${doctorIdParam}`)
       .then(data => {
         if (!data) throw new Error('Врач не найден');
         setDoctor(data);
@@ -100,14 +96,11 @@ export default function PublicDoctorProfilePage() { // Переименовал 
       .finally(() => setIsLoadingDoctor(false));
   }, [doctorIdParam]);
 
-  // 3. Загрузка доступных слотов при изменении врача или даты
   useEffect(() => {
     if (!doctorIdParam || !selectedDate) return;
-
     setIsLoadingSlots(true);
-    setAvailableSlots([]); // Очищаем предыдущие слоты
+    setAvailableSlots([]);
     setSlotsError(null);
-    // URL должен быть /api/doctors/:doctorId/availability?date=YYYY-MM-DD
     apiFetch<string[]>(`/doctors/${doctorIdParam}/availability?date=${selectedDate}`)
       .then(setAvailableSlots)
       .catch(e => setSlotsError(e.message))
@@ -118,16 +111,15 @@ export default function PublicDoctorProfilePage() { // Переименовал 
     if (!selectedBookingSlot || !currentPatientProfileId || !doctor) return;
     setIsBooking(true);
     try {
-      await apiFetch('/appointments', { // Бэкенд ожидает doctorId, patientId, apptTime
+      await apiFetch('/appointments', {
         method: 'POST',
         body: JSON.stringify({
-          doctorId: doctor._id || doctor.id, // было doctor_id
-          patientId: currentPatientProfileId,   // было patient_id
-          apptTime: `${selectedDate}T${selectedBookingSlot}:00Z`, // было appt_time
+          doctorId: doctor._id || doctor.id,
+          patientId: currentPatientProfileId,
+          apptTime: `${selectedDate}T${selectedBookingSlot}:00Z`,
         }),
       });
       alert('Приём успешно забронирован!');
-      // Обновляем слоты после бронирования
       setIsLoadingSlots(true);
       const freshSlots = await apiFetch<string[]>(`/doctors/${doctorIdParam}/availability?date=${selectedDate}`);
       setAvailableSlots(freshSlots);
@@ -152,13 +144,40 @@ export default function PublicDoctorProfilePage() { // Переименовал 
         transition={{ duration: 0.5 }}
         className={`max-w-2xl mx-auto ${glassCard} p-8 space-y-6 text-white`}
       >
-        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
-          {doctor.firstName} {doctor.lastName} {/* было first_name, last_name */}
-        </h1>
-        <p className="inline-block px-3 py-1 rounded-lg bg-white/20 backdrop-blur-sm text-sm font-medium text-gray-100">
-          {doctor.specialty}
-        </p>
+        {/* Секция с аватаркой и именем */}
+        <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6 mb-6">
+          {doctor.avatarUrl ? (
+            <Image
+              src={doctor.avatarUrl}
+              alt={`Аватар ${doctor.firstName} ${doctor.lastName}`}
+              width={128} // 8rem
+              height={128} // 8rem
+              className="rounded-lg object-cover w-64 h-90 border-2 border-indigo-400 shadow-lg"
+              priority // Для LCP, если это главный элемент
+            />
+          ) : (
+            <div className="w-32 h-32 bg-gray-700 rounded-full flex items-center justify-center text-gray-400 text-4xl">
+              {/* Первая буква имени и фамилии */}
+              {doctor.firstName?.charAt(0)}{doctor.lastName?.charAt(0)}
+            </div>
+          )}
+          <div className="text-center sm:text-left">
+            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+              {doctor.firstName} {doctor.lastName}
+            </h1>
+            <p className="inline-block mt-1 px-3 py-1 rounded-lg bg-white/20 backdrop-blur-sm text-sm font-medium text-gray-100">
+              {doctor.specialty}
+            </p>
+            {doctor.description && (
+              <div className="mt-4 text-gray-300 text-sm sm:text-base">
+                <h3 className="text-md font-semibold text-indigo-200 mb-1">О враче:</h3>
+                <p className="whitespace-pre-wrap leading-relaxed">{doctor.description}</p>
+              </div>
+            )}
+          </div>
+        </div>
 
+        {/* Выбор даты */}
         <div className="space-y-1">
           <label htmlFor="appointmentDate" className="block text-sm font-medium">Дата приёма:</label>
           <input
@@ -167,10 +186,11 @@ export default function PublicDoctorProfilePage() { // Переименовал 
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)}
             className={glassInput}
-            min={today} // Нельзя выбрать прошедшую дату
+            min={today}
           />
         </div>
 
+        {/* Слоты */}
         <div>
           <h3 className="text-lg font-medium mb-2">Свободные слоты:</h3>
           {isLoadingSlots && <p className="text-gray-400">Загрузка слотов...</p>}
@@ -193,26 +213,29 @@ export default function PublicDoctorProfilePage() { // Переименовал 
           )}
         </div>
 
+        {/* Бронирование */}
         {!token && (
           <Link href="/public/login" className="text-indigo-300 hover:underline block text-center pt-4">
             Войдите, чтобы записаться
           </Link>
         )}
+        {token && currentUserRole === ROLE_NAMES.PATIENT && !currentPatientProfileId && !isLoadingDoctor &&(
+            <p className="text-yellow-400 text-center pt-4">Загрузка вашего профиля для записи...</p>
+        )}
         {token && currentUserRole !== ROLE_NAMES.PATIENT && (
           <p className="text-gray-300 text-center pt-4">Запись доступна только пациентам.</p>
         )}
-        {token && currentUserRole === ROLE_NAMES.PATIENT && (
+        {token && currentUserRole === ROLE_NAMES.PATIENT && currentPatientProfileId &&(
           <button
             onClick={handleBookAppointment}
-            disabled={!selectedBookingSlot || !currentPatientProfileId || isBooking || isLoadingSlots}
+            disabled={!selectedBookingSlot || isBooking || isLoadingSlots}
             className={`${btnBase} w-full mt-4 ${
-              selectedBookingSlot && currentPatientProfileId
+              selectedBookingSlot
                 ? 'bg-gradient-to-r from-green-400 to-teal-400 text-white hover:from-teal-400 hover:to-green-400'
                 : 'bg-gray-500 text-gray-300 cursor-not-allowed'
             }`}
           >
-            {isBooking ? 'Бронируем...' : 
-             !currentPatientProfileId ? 'Загрузка профиля для записи...' : 
+            {isBooking ? 'Бронируем...' :
              selectedBookingSlot ? `Записаться на ${selectedBookingSlot}` : 'Выберите слот'}
           </button>
         )}
@@ -224,5 +247,5 @@ export default function PublicDoctorProfilePage() { // Переименовал 
           </button>
       </motion.div>
     </div>
-  )
+  );
 }

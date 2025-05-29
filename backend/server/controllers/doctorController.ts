@@ -14,7 +14,7 @@ import { isValidObjectId } from 'mongoose';
 export const createDoctor = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   console.log('[DoctorController] createDoctor hit. Requesting user role:', req.user?.roleName);
   try {
-    const { username, password, firstName, lastName, specialty } = req.body;
+    const { username, password, firstName, lastName, specialty, description } = req.body;
 
     if (!username || !password || !firstName || !lastName || !specialty) {
       res.status(400).json({ message: 'Имя пользователя, пароль, имя, фамилия и специализация обязательны' });
@@ -55,6 +55,7 @@ export const createDoctor = async (req: AuthenticatedRequest, res: Response): Pr
       firstName,
       lastName,
       specialty,
+      description: description || '',
     });
     const savedDoctorProfile = await newDoctorProfile.save();
     console.log(`[DoctorController] Doctor profile for ${firstName} ${lastName} created with ID: ${savedDoctorProfile._id}`);
@@ -139,7 +140,7 @@ export const getDoctorById = async (req: Request, res: Response): Promise<void> 
 };
 export const updateDoctorById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const doctorId = req.params.id;
-  const { firstName, lastName, specialty } = req.body; // Ожидаем camelCase
+  const { firstName, lastName, specialty, description } = req.body; // Ожидаем camelCase
 
   console.log(`[DoctorController] updateDoctorById hit. Doctor ID: ${doctorId}`);
 
@@ -165,6 +166,9 @@ export const updateDoctorById = async (req: AuthenticatedRequest, res: Response)
     doctor.lastName = lastName;
     doctor.specialty = specialty;
     // Не обновляем user или password здесь, это должно делаться через другие эндпоинты
+     if (description !== undefined) {
+        doctor.description = description;
+    }
 
     const updatedDoctor = await doctor.save();
     console.log(`[DoctorController] Doctor profile ID: ${updatedDoctor._id} updated.`);
@@ -239,5 +243,104 @@ export const getMyDoctorProfile = async (req: AuthenticatedRequest, res: Respons
   } catch (error: any) {
     console.error('[DoctorController] Ошибка в getMyDoctorProfile:', error);
     res.status(500).json({ message: 'Ошибка сервера при получении профиля врача' });
+  }
+};
+
+export const updateMyDoctorAvatar = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const userId = req.user?.id; // ID пользователя из токена
+  const { avatarUrl } = req.body;
+
+  if (typeof avatarUrl !== 'string') { // Проверяем, что avatarUrl это строка (может быть пустой для удаления)
+    res.status(400).json({ message: 'Поле avatarUrl обязательно и должно быть строкой.' });
+    return;
+  }
+
+  try {
+    // Находим профиль врача по ID пользователя
+    const doctorProfile = await Doctor.findOne({ user: userId });
+    if (!doctorProfile) {
+      res.status(404).json({ message: 'Профиль врача не найден.' });
+      return;
+    }
+
+    doctorProfile.avatarUrl = avatarUrl; // Обновляем или устанавливаем URL (пустая строка для удаления)
+    await doctorProfile.save();
+
+    res.status(200).json({
+      message: 'Аватар врача успешно обновлен.',
+      avatarUrl: doctorProfile.avatarUrl,
+      doctor: doctorProfile, // Возвращаем обновленный профиль врача
+    });
+
+  } catch (error: any) {
+    console.error('[DoctorController] Ошибка при обновлении аватара врача:', error);
+    res.status(500).json({ message: 'Ошибка сервера при обновлении аватара врача.' });
+  }
+};
+export const updateMyDoctorProfileData = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const userId = req.user?.id; // ID пользователя из токена
+  const { firstName, lastName, specialty } = req.body;
+
+  if (!firstName || !lastName || !specialty) {
+    res.status(400).json({ message: 'Имя, фамилия и специализация обязательны.' });
+    return;
+  }
+
+  try {
+    const doctorProfile = await Doctor.findOne({ user: userId });
+    if (!doctorProfile) {
+      res.status(404).json({ message: 'Профиль врача не найден.' });
+      return;
+    }
+
+    doctorProfile.firstName = firstName;
+    doctorProfile.lastName = lastName;
+    doctorProfile.specialty = specialty;
+    await doctorProfile.save();
+
+    res.status(200).json({
+      message: 'Данные профиля врача успешно обновлены.',
+      doctor: doctorProfile,
+    });
+
+  } catch (error: any) {
+    console.error('[DoctorController] Ошибка при обновлении данных профиля врача:', error);
+    res.status(500).json({ message: 'Ошибка сервера при обновлении данных профиля врача.' });
+  }
+};
+
+export const updateDoctorAvatarById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const doctorId = req.params.id; // ID профиля врача из URL
+  const { avatarUrl } = req.body;
+
+  if (!isValidObjectId(doctorId)) {
+    res.status(400).json({ message: 'Некорректный ID врача.' });
+    return;
+  }
+
+  if (typeof avatarUrl !== 'string') {
+    res.status(400).json({ message: 'Поле avatarUrl обязательно и должно быть строкой.' });
+    return;
+  }
+
+  try {
+    const doctorProfile = await Doctor.findById(doctorId);
+    if (!doctorProfile) {
+      res.status(404).json({ message: 'Профиль врача не найден.' });
+      return;
+    }
+
+    doctorProfile.avatarUrl = avatarUrl;
+    await doctorProfile.save();
+
+    res.status(200).json({
+      message: 'Аватар врача успешно обновлен администратором.',
+      avatarUrl: doctorProfile.avatarUrl,
+      doctor: doctorProfile,
+    });
+
+  } catch (error: any) {
+    console.error(`[DoctorController] Ошибка при обновлении аватара для врача ${doctorId}:`, error);
+    res.status(500).json({ message: 'Ошибка сервера при обновлении аватара врача.' });
   }
 };

@@ -9,6 +9,8 @@ export interface IDoctor extends Document<Types.ObjectId> {
   firstName: string;
   lastName: string;
   specialty: string;
+  avatarUrl?: string;
+  description?: string;
   assignedPatients?: (Types.ObjectId)[]; // Массив ID профилей пациентов
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +39,16 @@ const DoctorSchema = new Schema<IDoctor>(
       type: String,
       required: [true, "Специализация врача обязательна"],
       trim: true,
+    },
+    avatarUrl: { // <--- НОВОЕ ПОЛЕ В СХЕМЕ
+      type: String,
+      trim: true,
+      default: '', // Можно установить пустую строку по умолчанию или оставить undefined
+    },
+     description: { // <--- НОВОЕ ПОЛЕ В СХЕМЕ
+      type: String,
+      trim: true,
+      default: '', // Можно установить пустую строку по умолчанию или оставить undefined
     },
     assignedPatients: [{ // Массив ссылок на профили пациентов (Patient)
       type: Schema.Types.ObjectId,

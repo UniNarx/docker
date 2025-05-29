@@ -126,17 +126,7 @@ export default function NavBar() {
 
   // Определяем базовый href для логотипа
   let logoHref = "/public/doctors"; // По умолчанию для анонима
-  if (currentRoleName && currentRoleName !== ROLE_NAMES.ANONYMOUS) {
-    // Если пользователь залогинен и это не аноним, можно направить его на соответствующий дашборд
-    // Это пример, можно сделать более сложную логику
-    if (currentRoleName === ROLE_NAMES.PATIENT) {
-        logoHref = "/dashboard/patients/appointments"; // или /public/doctors
-    } else if (currentRoleName === ROLE_NAMES.DOCTOR) {
-        logoHref = "/dashboard/doctors/appointments";
-    } else if (currentRoleName === ROLE_NAMES.ADMIN || currentRoleName === ROLE_NAMES.SUPERADMIN) {
-        logoHref = "/dashboard/profile"; // или /dashboard/doctors
-    }
-  }
+ 
 
 
   return (

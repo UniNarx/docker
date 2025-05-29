@@ -10,7 +10,7 @@ import { motion } from 'framer-motion'
 type CreateAdminForm = {
   username: string;
   password: string;
-  role: 'Patient' | 'Doctor' | 'Administrator' | 'SuperAdmin'; // Обновил возможные роли, если нужно
+  role: 'Patient' | 'Doctor' | 'Admin' | 'SuperAdmin'; // Обновил возможные роли, если нужно
                                                                 // В вашем <select> только User, Administrator, SuperAdmin
                                                                 // Убедитесь, что значения в <select> совпадают с этим типом
                                                                 // и с тем, что ожидает бэкенд.
@@ -30,7 +30,7 @@ export default function CreateAdminPage() {
   const [form, setForm] = useState<CreateAdminForm>({
     username: '',
     password: '',
-    role: 'Administrator', // Значение по умолчанию для <select>
+    role: 'Admin', // Значение по умолчанию для <select>
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);

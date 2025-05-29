@@ -88,7 +88,7 @@ export default function PatientsPage() {
           <div className="overflow-x-auto">
             <table className="w-full table-auto border-separate bg-white/10 rounded-lg">
               <thead className="text-left text-gray-300">
-                <tr> {/* Заголовки таблицы должны быть в tr */}
+                <tr>
                   {['ID', 'Имя', 'Фамилия', 'ДР', 'Создано', 'Действия'].map(col => (
                     <th key={col} className="px-4 py-2">{col}</th>
                   ))}
@@ -96,32 +96,27 @@ export default function PatientsPage() {
               </thead>
               <tbody>
                 {patients.map((p, i) => {
-                  const patientId = p._id || p.id; // Используем _id или id
+                  const patientId = p._id || p.id; 
                   return (
                     <motion.tr
-                      key={patientId} // Ключ должен быть уникальным
+                      key={patientId}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.05 }}
                       className={`border-t border-white/20 ${rowHover}`}
                     >
                       <td className="px-4 py-3 text-gray-200 truncate max-w-[100px]">{patientId}</td>
-                      <td className="px-4 py-3 text-gray-200">{p.firstName}</td>    {/* было first_name */}
-                      <td className="px-4 py-3 text-gray-200">{p.lastName}</td>     {/* было last_name */}
+                      <td className="px-4 py-3 text-gray-200">{p.firstName}</td>   
+                      <td className="px-4 py-3 text-gray-200">{p.lastName}</td>    
                       <td className="px-4 py-3 text-gray-200">
-                        {new Date(p.dateOfBirth).toLocaleDateString('ru-RU')} {/* было date_of_birth */}
+                        {new Date(p.dateOfBirth).toLocaleDateString('ru-RU')} 
                       </td>
                       <td className="px-4 py-3 text-gray-200">
-                        {new Date(p.createdAt).toLocaleString('ru-RU', { /* было created_at */
+                        {new Date(p.createdAt).toLocaleString('ru-RU', { 
                           dateStyle: 'short', timeStyle: 'short'
                         })}
                       </td>
                       <td className="px-4 py-3 space-x-2">
-                        {/* Если нужна кнопка редактирования:
-                        <Link href={`/dashboard/patients/${patientId}/edit`}>
-                          <button className={btnEdit}>Ред.</button>
-                        </Link>
-                        */}
                         <button
                           className={btnDelete}
                           onClick={() => patientId && handleDeletePatient(patientId)}

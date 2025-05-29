@@ -147,20 +147,16 @@ export default function ProfilePage() {
           )}
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Link href="/dashboard/profile/edit">
-            <button className="w-full sm:w-auto px-4 py-2 rounded-lg font-medium transition-colors text-white bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-orange-400 hover:to-yellow-400">
-              Редактировать
-            </button>
-          </Link>
+        <div className="flex flex-col  gap-3">
+          
           <Link href="/dashboard/profile/password">
-            <button className="w-full sm:w-auto px-4 py-2 rounded-lg font-medium transition-colors text-white bg-gradient-to-r from-red-500 to-pink-500 hover:from-pink-500 hover:to-red-500">
+            <button className="w-full  px-4 py-2 rounded-lg font-medium transition-colors text-white bg-gradient-to-r from-red-500 to-pink-500 hover:from-pink-500 hover:to-red-500">
               Сменить пароль
             </button>
           </Link>
           {currentUserRoleName === ROLE_NAMES.SUPERADMIN && (
             <Link href="/dashboard/profile/create-admin">
-              <button className="w-full sm:w-auto px-4 py-2 rounded-lg font-medium transition-colors text-white bg-gradient-to-r from-green-400 to-teal-400 hover:from-teal-400 hover:to-green-400">
+              <button className="w-full  px-4 py-2 rounded-lg font-medium transition-colors text-white bg-gradient-to-r from-green-400 to-teal-400 hover:from-teal-400 hover:to-green-400">
                 Добавить пользователя
               </button>
             </Link>
