@@ -23,7 +23,7 @@ services:
       - clinic-network
 
   backend:
-    image: arhariniel/docker-med-back:latest1 # <-- Используем образ из Docker Hub
+    image: arhariniel/docker-med-back:latest # <-- Используем образ из Docker Hub
     # build: ./backend # <--- Секция build удалена
     ports:
       - "8080:8080"
