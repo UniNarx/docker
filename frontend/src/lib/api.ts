@@ -1,5 +1,6 @@
 // lib/api.ts
-const API_URL = process.env.NEXT_PUBLIC_API_BASE || window.location.origin + '/api'
+const API_URL = '/api'
+
 
 // lib/api.ts
 export async function apiFetch<T>(

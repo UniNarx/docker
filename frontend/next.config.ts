@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
   images: {
     domains: ['utfs.io', 'localhost'],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://backend:8080/api/:path*',
+      },
+    ]
+  },
   webpack: (
     config: WebpackConfiguration,
     options: NextWebpackOptions
