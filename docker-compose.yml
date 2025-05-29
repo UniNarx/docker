@@ -1,41 +1,45 @@
+version: '3.8'
 
 services:
   frontend:
-    build:
-      context: ./frontend
-      args:
-        # Передаем build-time переменные, если они нужны
-        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE_COMPOSE:-http://localhost:8080/api} # Используем /api, если бэкенд его использует
+    image: arhariniel/docker-med-front:latest # <-- Используем образ из Docker Hub
+    # build: # <--- Секция build удалена
+    #   context: ./frontend
+    #   args:
+    #     NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE_COMPOSE:-http://localhost:8080/api}
     ports:
       - "3000:3000"
     environment:
       - PORT=3000
-      # Runtime переменные, если NEXT_PUBLIC_API_BASE используется на сервере Next.js
-      - NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE_COMPOSE:-http://backend:8080/api} # Обращение к backend по имени сервиса
+      # Эта переменная будет доступна для серверной части Next.js во время выполнения.
+      # Клиентская часть будет использовать то, что было встроено при сборке образа.
+      - NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE_COMPOSE:-http://backend:8080/api}
       - UPLOADTHING_SECRET=${UPLOADTHING_SECRET_COMPOSE} 
-      - UPLOADTHING_TOKEN=${UPLOADTHING_TOKEN} 
+      - UPLOADTHING_APP_ID=${UPLOADTHING_APP_ID_COMPOSE} # Убедитесь, что эта переменная определена в .env
+      # - UPLOADTHING_TOKEN=${UPLOADTHING_TOKEN_COMPOSE} # Если это отдельный токен, убедитесь, что UPLOADTHING_TOKEN_COMPOSE есть в .env
     depends_on:
       - backend
     networks:
       - clinic-network
 
   backend:
-    build: ./backend
+    image: arhariniel/docker-med-back:latest # <-- Используем образ из Docker Hub
+    # build: ./backend # <--- Секция build удалена
     ports:
       - "8080:8080"
     environment:
       - PORT=8080
-      - MONGODB_URI=${MONGODB_URI_COMPOSE} # Обращение к mongo по имени сервиса
+      - MONGODB_URI=${MONGODB_URI_COMPOSE} # Убедитесь, что это URI для MongoDB Atlas
       - JWT_SECRET=${JWT_SECRET_COMPOSE}
       - SUPERADMIN_USERNAME=${SUPERADMIN_USERNAME_COMPOSE}
       - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD_COMPOSE}
       - FRONTEND_URL=${FRONTEND_URL_COMPOSE:-http://localhost:3000}
-    # depends_on:
-    #   - mongo # Если MongoDB тоже в Docker Compose
+    # depends_on: # Закомментировано, так как mongo сервис закомментирован
+    #   - mongo 
     networks:
       - clinic-network
 
-  # mongo: # Пример сервиса MongoDB
+  # mongo: # Сервис MongoDB закомментирован, так как используется Atlas
   #   image: mongo:latest
   #   ports:
   #     - "27017:27017"
@@ -48,5 +52,5 @@ networks:
   clinic-network:
     driver: bridge
 
-# volumes:
+# volumes: # Том для MongoDB закомментирован
 #   mongo-data:
