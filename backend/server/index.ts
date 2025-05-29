@@ -3,7 +3,7 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import http from 'http'; // Используем http для WebSocket
-
+import type { ListenOptions } from 'net';
 import appConfig from './config/index';
 import connectDB from './utils/db';
 import { seedRoles, seedSuperAdmin } from './utils/seed';
@@ -22,6 +22,13 @@ import chatRoutes from './routes/chatRoutes'; // Маршруты для API ч�
 const app: Express = express();
 const httpServer = http.createServer(app); // Создаем HTTP сервер для Express и WebSocket
 const port = appConfig.port;
+const portNumber = parseInt(appConfig.port, 10);
+
+if (isNaN(portNumber)) {
+  console.error(`[server/index] Неверный PORT в конфиге: ${appConfig.port}`);
+  process.exit(1);
+}
+
 
 const startServer = async () => {
   await connectDB();
@@ -31,7 +38,9 @@ const startServer = async () => {
   console.log(`[server/index] Используется порт для Express: ${port}`);
   console.log(`[server/index] JWT Secret (первые 3 символа): ${appConfig.jwtSecret.substring(0, 3)}...`);
   console.log(`[server/index] MONGO_URI (начало): ${appConfig.mongoURI.split('/').slice(0,3).join('/')}/...`);
-
+app.get('/', (_req, res) => {
+  res.send('OK');
+});
   app.use(cors({
       origin: process.env.FRONTEND_URL || 'http://localhost:3000', // Используйте переменную окружения
       credentials: true,
@@ -76,9 +85,14 @@ const startServer = async () => {
   });
 
   // Запускаем httpServer (который включает Express app)
-  httpServer.listen(port, () => {
-    console.log(`✅ Express API и WebSocket сервер запущены на http://localhost:${port}`);
-  });
+httpServer.listen(
+  portNumber,
+  '0.0.0.0',
+  () => {
+    console.log(`✅ Express API и WebSocket запущены на http://0.0.0.0:${portNumber}`);
+  }
+);
+
 
 };
 
