@@ -81,7 +81,7 @@ export default function NavBar() {
           <NavLink href="/public/doctors">Врачи</NavLink>
           <NavLink href="/dashboard/patients/appointments">Мои приёмы</NavLink>
           <NavLink href="/dashboard/patients/medical_records">Мои медкарты</NavLink>
-          <NavLink href="/dashboard/chat" icon={<MessageSquareText size={16}/>}>Чат</NavLink> {/* Ссылка на чат */}
+          <NavLink href="/dashboard/chat" >Чат</NavLink> {/* Ссылка на чат */}
           <NavLink href="/dashboard/patients/profile">Профиль</NavLink>
           {LogoutBtn}
         </>
@@ -92,7 +92,7 @@ export default function NavBar() {
         <>
           <NavLink href="/dashboard/doctors/patients">Пациенты</NavLink>
           <NavLink href="/dashboard/doctors/appointments">Приёмы</NavLink>
-          <NavLink href="/dashboard/chat" icon={<MessageSquareText size={16}/>}>Чат</NavLink> {/* Ссылка на чат */}
+          <NavLink href="/dashboard/chat" >Чат</NavLink> {/* Ссылка на чат */}
           <NavLink href="/dashboard/doctors/profile">Профиль</NavLink>
           {LogoutBtn}
         </>

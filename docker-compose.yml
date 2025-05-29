@@ -1,0 +1,52 @@
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Передаем build-time переменные, если они нужны
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE_COMPOSE:-http://localhost:8080/api} # Используем /api, если бэкенд его использует
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      # Runtime переменные, если NEXT_PUBLIC_API_BASE используется на сервере Next.js
+      - NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE_COMPOSE:-http://backend:8080/api} # Обращение к backend по имени сервиса
+      - UPLOADTHING_SECRET=${UPLOADTHING_SECRET_COMPOSE} 
+      - UPLOADTHING_TOKEN=${UPLOADTHING_TOKEN} 
+    depends_on:
+      - backend
+    networks:
+      - clinic-network
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - MONGODB_URI=${MONGODB_URI_COMPOSE:-mongodb://mongo:27017/clinicdb} # Обращение к mongo по имени сервиса
+      - JWT_SECRET=${JWT_SECRET_COMPOSE}
+      - SUPERADMIN_USERNAME=${SUPERADMIN_USERNAME_COMPOSE}
+      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD_COMPOSE}
+      - FRONTEND_URL=${FRONTEND_URL_COMPOSE:-http://localhost:3000}
+    depends_on:
+      - mongo # Если MongoDB тоже в Docker Compose
+    networks:
+      - clinic-network
+
+  mongo: # Пример сервиса MongoDB
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - clinic-network
+
+networks:
+  clinic-network:
+    driver: bridge
+
+volumes:
+  mongo-data:

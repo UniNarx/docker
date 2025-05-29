@@ -17,7 +17,7 @@ import {
 import ConversationList from '@/components/chat/ConversationList';
 import ChatWindow from '@/components/chat/ChatWindow';
 import { getTokenFromStorage, getDecodedToken } from '@/lib/authUtils';
-import { MessageSquare, Users, XCircle, AlertTriangle, CircleUser } from 'lucide-react';
+import { MessageSquare, Users, XCircle, AlertTriangle, CircleUser, UserCircle } from 'lucide-react';
 
 const glassCard = "bg-white/5 backdrop-blur-md border border-white/10 rounded-xl shadow-xl";
 const mainChatContainer = `flex flex-col md:flex-row h-[calc(100vh-8rem)] ${glassCard} overflow-hidden`;
@@ -319,7 +319,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 min-h-screen !mt-16 md:!mt-[4.5rem]">
+    <div className="p-4 md:p-6 h-screen !mt-16 md:!mt-[4.5rem]">
       <div className={mainChatContainer}>
         <div className={conversationListContainer}>
           <div className="p-3 border-b border-white/10">
@@ -363,8 +363,8 @@ export default function ChatPage() {
                         activeConversation?.otherParticipant._id === user.id ? 'bg-indigo-600/20' : ''
                     }`}
                 >
-                    
-                    <span className="text-xs text-gray-200 truncate">{user.username}</span>
+                    <UserCircle className="w-6 h-6 text-green-300 flex-shrink-0" />
+                    <span className="text-base text-gray-200 truncate">{user.username}</span>
                 </button>
             ))}
           </div>
