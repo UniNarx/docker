@@ -12,7 +12,7 @@ import {
   NewMessagePayload,
   ErrorPayload,
   ChatHistoryResponse,
-  UserLeftPayload // <--- Убедимся, что этот тип импортирован
+  UserLeftPayload
 } from '@/types/chat';
 import ConversationList from '@/components/chat/ConversationList';
 import ChatWindow from '@/components/chat/ChatWindow';
@@ -45,6 +45,7 @@ export default function ChatPage() {
   const initialConversationsFetchedRef = useRef(false);
   const isFetchingConversationsRef = useRef(false);
   const initialSocketConnectionDoneRef = useRef(false);
+  const isFetchingMessagesRef = useRef(false);
 
   useEffect(() => {
     const token = getTokenFromStorage();
@@ -68,15 +69,9 @@ export default function ChatPage() {
   }, [router]);
 
   const fetchConversations = useCallback(async (forceRefresh = false) => {
-    if (!currentUser) {
-      return;
-    }
-    if (isFetchingConversationsRef.current && !forceRefresh) {
-        return;
-    }
-    if (!forceRefresh && initialConversationsFetchedRef.current) {
-      return;
-    }
+    if (!currentUser) return;
+    if (isFetchingConversationsRef.current && !forceRefresh) return;
+    if (!forceRefresh && initialConversationsFetchedRef.current) return;
 
     isFetchingConversationsRef.current = true;
     setIsLoadingConversations(true);
@@ -100,8 +95,6 @@ export default function ChatPage() {
   }, [currentUser, fetchConversations]);
 
   const handleNewMessage = useCallback((newMessage: NewMessagePayload) => {
-    console.log('[ChatPage] New message received via WebSocket:', newMessage);
-    
     if (activeConversation?.conversationId === newMessage.conversationId || 
         (activeConversation?.otherParticipant._id === newMessage.sender.id && currentUser?.id === newMessage.receiver.id) ||
         (activeConversation?.otherParticipant._id === newMessage.receiver.id && currentUser?.id === newMessage.sender.id)
@@ -111,150 +104,140 @@ export default function ChatPage() {
           return [...prevMessages, newMessage];
         });
     }
-
     setConversations(prevConvos => {
-      let conversationExists = false;
-      const updatedConvos = prevConvos.map(convo => {
-        if (convo.conversationId === newMessage.conversationId) {
-          conversationExists = true;
-          return {
-            ...convo,
-            lastMessage: {
-              _id: newMessage._id,
-              text: newMessage.message || newMessage.text || '',
-              timestamp: newMessage.timestamp,
-              senderId: newMessage.sender.id,
-              receiverId: newMessage.receiver.id,
-              read: newMessage.sender.id === currentUser?.id ? true : newMessage.read
-            },
-            unreadCount: (activeConversation?.conversationId !== newMessage.conversationId && newMessage.sender.id !== currentUser?.id)
-                         ? (convo.unreadCount || 0) + 1
-                         : (activeConversation?.conversationId === newMessage.conversationId ? 0 : convo.unreadCount)
-          };
-        }
-        return convo;
-      });
-
-      if (!conversationExists && currentUser) {
-          const otherParticipantIsSender = newMessage.sender.id !== currentUser.id;
-          const newConvo: ConversationData = {
-              conversationId: newMessage.conversationId,
+        let conversationExists = false;
+        const updatedConvos = prevConvos.map(convo => {
+          if (convo.conversationId === newMessage.conversationId) {
+            conversationExists = true;
+            return {
+              ...convo,
               lastMessage: {
-                _id: newMessage._id,
-                text: newMessage.message || newMessage.text || '',
-                timestamp: newMessage.timestamp,
-                senderId: newMessage.sender.id,
-                receiverId: newMessage.receiver.id,
-                read: newMessage.sender.id === currentUser?.id ? true : newMessage.read
+                _id: newMessage._id, text: newMessage.message || newMessage.text || '',
+                timestamp: newMessage.timestamp, senderId: newMessage.sender.id,
+                receiverId: newMessage.receiver.id, read: newMessage.sender.id === currentUser?.id ? true : newMessage.read
               },
-              otherParticipant: otherParticipantIsSender ? newMessage.sender : newMessage.receiver,
-              unreadCount: otherParticipantIsSender ? 1 : 0,
-          };
-          return [newConvo, ...updatedConvos.filter(c => c.conversationId !== newMessage.conversationId)];
-      }
-
-      const convoIndex = updatedConvos.findIndex(c => c.conversationId === newMessage.conversationId);
-      if (convoIndex > -1) {
-        const movedConvo = updatedConvos.splice(convoIndex, 1)[0];
-        return [movedConvo, ...updatedConvos];
-      }
-      return updatedConvos;
+              unreadCount: (activeConversation?.conversationId !== newMessage.conversationId && newMessage.sender.id !== currentUser?.id)
+                           ? (convo.unreadCount || 0) + 1
+                           : (activeConversation?.conversationId === newMessage.conversationId ? 0 : convo.unreadCount)
+            };
+          }
+          return convo;
+        });
+        if (!conversationExists && currentUser) {
+            const otherParticipantIsSender = newMessage.sender.id !== currentUser.id;
+            const newConvo: ConversationData = {
+                conversationId: newMessage.conversationId,
+                lastMessage: {
+                  _id: newMessage._id, text: newMessage.message || newMessage.text || '',
+                  timestamp: newMessage.timestamp, senderId: newMessage.sender.id,
+                  receiverId: newMessage.receiver.id, read: newMessage.sender.id === currentUser?.id ? true : newMessage.read
+                },
+                otherParticipant: otherParticipantIsSender ? newMessage.sender : newMessage.receiver,
+                unreadCount: otherParticipantIsSender ? 1 : 0,
+            };
+            return [newConvo, ...updatedConvos.filter(c => c.conversationId !== newMessage.conversationId)];
+        }
+        const convoIndex = updatedConvos.findIndex(c => c.conversationId === newMessage.conversationId);
+        if (convoIndex > -1) {
+          const movedConvo = updatedConvos.splice(convoIndex, 1)[0];
+          return [movedConvo, ...updatedConvos];
+        }
+        return updatedConvos;
     });
   }, [activeConversation, currentUser]);
 
-  const handleSocketChatError = useCallback((error: ErrorPayload) => {
-    setChatError(`Ошибка WebSocket: ${error.message}`);
-  }, []);
-
-  const handleInfoMessage = useCallback((payload: any) => {
-    console.log("[ChatPage] Info from server:", payload);
-  }, []);
-  
+  const handleSocketChatError = useCallback((error: ErrorPayload) => setChatError(`Ошибка WebSocket: ${error.message}`), []);
+  const handleInfoMessage = useCallback((payload: any) => console.log("[ChatPage] Info from server:", payload), []);
   const handleActiveUserList = useCallback((users: ChatParticipant[]) => {
-    console.log("[ChatPage] Active user list received:", users);
-    if (currentUser) {
-        setActiveChatUsers(users.filter(u => u.id !== currentUser.id));
-    } else {
-        setActiveChatUsers(users);
-    }
+    if (currentUser) setActiveChatUsers(users.filter(u => u.id !== currentUser.id));
+    else setActiveChatUsers(users);
   }, [currentUser]);
-
   const handleUserJoined = useCallback((user: ChatParticipant) => {
-    console.log("[ChatPage] User joined:", user);
     if (currentUser && user.id === currentUser.id) return;
-    setActiveChatUsers(prevUsers => {
-      if (prevUsers.find(u => u.id === user.id)) return prevUsers;
-      return [...prevUsers, user];
-    });
+    setActiveChatUsers(prevUsers => prevUsers.find(u => u.id === user.id) ? prevUsers : [...prevUsers, user]);
   }, [currentUser]);
-
-  const handleUserLeft = useCallback((payload: UserLeftPayload) => { // Тип UserLeftPayload теперь должен быть доступен
-    console.log("[ChatPage] User left:", payload);
+  const handleUserLeft = useCallback((payload: UserLeftPayload) => {
     setActiveChatUsers(prevUsers => prevUsers.filter(u => u.id !== payload.userId));
-  }, []); // Зависимость от currentUser здесь не нужна, т.к. payload содержит userId
+  }, []);
 
   const handleSocketOpen = useCallback(() => {
     setChatError(null);
-    console.log("[ChatPage] WebSocket connection opened.");
-    if(currentUser && !initialSocketConnectionDoneRef.current) {
-        fetchConversations(true);
-        initialSocketConnectionDoneRef.current = true;
+    if (currentUser && !initialSocketConnectionDoneRef.current) {
+      fetchConversations(true);
+      initialSocketConnectionDoneRef.current = true;
     } else if (currentUser) {
-        fetchConversations(true); 
+      fetchConversations(true); 
     }
   }, [currentUser, fetchConversations]);
 
-  const handleSocketClose = useCallback((event: CloseEvent) => {
-    console.log(`[ChatPage] WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`);
-  }, []);
+  const handleSocketClose = useCallback((event: CloseEvent) => console.log(`[ChatPage] WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`), []);
 
   const { isConnected, sendMessage } = useChatSocket({
-    onNewMessage: handleNewMessage,
-    onChatError: handleSocketChatError,
-    onInfoMessage: handleInfoMessage,
-    onOpen: handleSocketOpen,
-    onClose: handleSocketClose,
-    onActiveUserList: handleActiveUserList,
-    onUserJoined: handleUserJoined,
-    onUserLeft: handleUserLeft,
+    onNewMessage: handleNewMessage, onChatError: handleSocketChatError,
+    onInfoMessage: handleInfoMessage, onOpen: handleSocketOpen,
+    onClose: handleSocketClose, onActiveUserList: handleActiveUserList,
+    onUserJoined: handleUserJoined, onUserLeft: handleUserLeft,
   });
 
   const fetchMessages = useCallback(async (otherParticipantId: string, pageToLoad: number = 1, loadMore = false) => {
     if (!otherParticipantId) return;
-    if (isLoadingMessages && loadMore) return;
+    if (isFetchingMessagesRef.current && !loadMore) {
+        console.log("[ChatPage] fetchMessages: Skipping, already fetching initial messages for this participant.");
+        return;
+    }
+    if (isFetchingMessagesRef.current && loadMore) {
+        console.log("[ChatPage] fetchMessages: Skipping loadMore, a message load is already in progress.");
+        return;
+    }
 
+    isFetchingMessagesRef.current = true;
     if (!loadMore) {
       setIsLoadingMessages(true);
-      setMessages([]);
+      setMessages([]); 
     }
     setApiError(null);
     try {
       const response = await apiFetch<ChatHistoryResponse>(`/chat/history/${otherParticipantId}?page=${pageToLoad}&limit=${messagesPerPage}`);
-      setMessages(prev => loadMore ? [...response.messages, ...prev] : (response.messages || []));
+      const newMessages = response.messages || [];
+      
+      setMessages(prev => {
+        const existingMessages = loadMore ? prev : [];
+        const combined = [...newMessages, ...existingMessages];
+        // Удаляем дубликаты по _id, если они вдруг появятся
+        const uniqueMessages = Array.from(new Map(combined.map(msg => [msg._id, msg])).values());
+        return uniqueMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      });
+
       setCurrentPage(response.currentPage);
       setTotalPages(response.totalPages || 1);
 
-      const currentConversationId = activeConversation?.conversationId;
-      if (currentConversationId) {
-          setConversations(prev => prev.map(c => c.conversationId === currentConversationId ? {...c, unreadCount: 0} : c));
-      }
+      // Обновляем unreadCount для активного диалога
+      // Используем otherParticipantId для поиска нужного диалога в conversations
+      setConversations(prevConvos => 
+        prevConvos.map(c => 
+          c.otherParticipant._id === otherParticipantId ? { ...c, unreadCount: 0 } : c
+        )
+      );
     } catch (err: any) {
       setApiError(err.message || "Не удалось загрузить сообщения.");
       if (!loadMore) setMessages([]);
     } finally {
+      isFetchingMessagesRef.current = false;
       setIsLoadingMessages(false);
     }
-  }, [activeConversation?.conversationId, messagesPerPage, isLoadingMessages]);
+  }, [messagesPerPage]); // Убрали 'conversations' и 'activeConversation' из зависимостей
 
   useEffect(() => {
-    if (activeConversation?.otherParticipant._id) {
+    const currentOtherParticipantId = activeConversation?.otherParticipant._id;
+    if (currentOtherParticipantId) {
+      console.log(`[ChatPage] useEffect [activeConversation.otherParticipant._id]: Active conversation changed to user ID ${currentOtherParticipantId}. Fetching messages.`);
       setCurrentPage(1); 
       setTotalPages(1);
-      fetchMessages(activeConversation.otherParticipant._id, 1);
+      fetchMessages(currentOtherParticipantId, 1, false);
     } else {
-      setMessages([]);
+      setMessages([]); // Очищаем сообщения, если нет активного диалога
     }
-  }, [activeConversation, fetchMessages]);
+  }, [activeConversation?.otherParticipant._id, fetchMessages]); // Зависит только от ID собеседника и стабильной fetchMessages
 
   const handleSelectConversation = useCallback((conversationOrUser: ConversationData | ChatParticipant) => {
     if (!currentUser) return;
@@ -278,8 +261,11 @@ export default function ChatPage() {
     }
     
     if (targetConversation) {
-        if (activeConversation?.conversationId === targetConversation.conversationId && messages.length > 0) {
-            if (targetConversation.unreadCount > 0) {
+        if (activeConversation?.conversationId === targetConversation.conversationId && 
+            (!targetConversation.unreadCount || targetConversation.unreadCount === 0) &&
+            messages.length > 0 
+        ) {
+             if (targetConversation.unreadCount > 0) {
                 setConversations(prevConvos =>
                     prevConvos.map(c =>
                         c.conversationId === targetConversation?.conversationId ? { ...c, unreadCount: 0 } : c
@@ -288,7 +274,7 @@ export default function ChatPage() {
             }
             return;
         }
-        setActiveConversation(targetConversation);
+        setActiveConversation(targetConversation); // Это вызовет useEffect для загрузки сообщений
         if (targetConversation.unreadCount > 0) {
             setConversations(prevConvos =>
                 prevConvos.map(c =>
@@ -301,15 +287,14 @@ export default function ChatPage() {
 
   const handleSendMessage = (text: string) => {
     if (!activeConversation || !currentUser) {
-      setApiError("Не выбран диалог или пользователь не определен.");
-      return;
+      setApiError("Не выбран диалог или пользователь не определен."); return;
     }
     if (!text.trim()) return;
     sendMessage(activeConversation.otherParticipant._id, text.trim());
   };
   
   const handleLoadMoreMessages = () => {
-    if (activeConversation && currentPage < totalPages && !isLoadingMessages) {
+    if (activeConversation && currentPage < totalPages && !isFetchingMessagesRef.current) {
         fetchMessages(activeConversation.otherParticipant._id, currentPage + 1, true);
     }
   };
@@ -319,7 +304,8 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 h-screen !mt-16 md:!mt-[4.5rem]">
+    // ... JSX без изменений ...
+    <div className="p-4 md:p-6 min-h-screen !mt-16 md:!mt-[4.5rem]">
       <div className={mainChatContainer}>
         <div className={conversationListContainer}>
           <div className="p-3 border-b border-white/10">
@@ -364,7 +350,7 @@ export default function ChatPage() {
                     }`}
                 >
                     <UserCircle className="w-6 h-6 text-green-300 flex-shrink-0" />
-                    <span className="text-base text-gray-200 truncate">{user.username}</span>
+                    <span className="text-xs text-gray-200 truncate">{user.username}</span>
                 </button>
             ))}
           </div>
