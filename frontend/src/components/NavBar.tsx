@@ -1,57 +1,46 @@
 // components/NavBar.tsx
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation"; // Добавили useRouter
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
     getRoleNameFromToken,
     getTokenFromStorage,
     removeTokenFromStorage,
-    ROLE_NAMES, // Импортируем имена ролей
+    ROLE_NAMES,
     RoleName,
-    saveTokenToStorage // Если нужно для логина из NavBar (хотя обычно логин на отдельной странице)
-} from "@/lib/authUtils"; // Путь к вашему файлу
+    // saveTokenToStorage // Не используется здесь
+} from "@/lib/authUtils";
+import { MessageSquareText } from "lucide-react"; // Иконка для чата
 
 export default function NavBar() {
-  // Используем currentRoleName из вашего нового authUtils
   const [currentRoleName, setCurrentRoleName] = useState<RoleName>(ROLE_NAMES.ANONYMOUS);
   const pathname = usePathname();
-  const router = useRouter(); // Для навигации после logout
+  const router = useRouter();
 
-  // Функция для чтения токена и установки роли
   const readTokenAndSetRole = () => {
     const token = getTokenFromStorage();
     const roleNameFromToken = getRoleNameFromToken(token);
     setCurrentRoleName(roleNameFromToken);
-    console.log("NavBar: Role set to ->", roleNameFromToken); // Лог для отладки
   };
 
   useEffect(() => {
-    readTokenAndSetRole(); // Читаем при монтировании
-
-    // Обработчик кастомного события 'token-changed'
-    const handleTokenChange = (event: Event) => {
-      console.log("NavBar: Event 'token-changed' detected.", (event as CustomEvent).detail);
-      readTokenAndSetRole(); // Перечитываем токен и обновляем роль
+    readTokenAndSetRole();
+    const handleTokenChange = () => {
+      readTokenAndSetRole();
     };
-
     window.addEventListener("token-changed", handleTokenChange);
-
-    // Очистка слушателя при размонтировании компонента
     return () => {
       window.removeEventListener("token-changed", handleTokenChange);
     };
-  }, []); // Пустой массив зависимостей, чтобы эффект выполнился один раз при монтировании и очистился при размонтировании
+  }, []);
 
   const handleLogout = () => {
-    removeTokenFromStorage(); // Удаляем токен и диспатчим событие (authUtils должен это делать)
-    // setCurrentRoleName(ROLE_NAMES.ANONYMOUS); // Сразу обновляем роль в UI
-    // router.push("/public/login"); // Используем Next.js router для навигации
-    // Перезагрузка страницы может быть более надежным способом сбросить все состояния, если есть сложности
-     window.location.href = "/public/login";
+    removeTokenFromStorage();
+    window.location.href = "/public/login"; // Перезагрузка для сброса состояния
   };
 
-  const linkClass = "relative px-2 py-1 font-medium text-gray-800 transition-transform duration-200 hover:scale-105";
+  const linkClass = "flex items-center px-2 py-1 font-medium text-gray-800 transition-transform duration-200 hover:scale-105"; // Добавил flex и items-center
   const fancyUnderline = (active: boolean) =>
     `after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-0.5 ${
       active
@@ -59,10 +48,11 @@ export default function NavBar() {
         : "after:w-0"
     } after:transition-all after:duration-300`;
 
-  const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => {
-    const isActive = pathname === href;
+  const NavLink = ({ href, children, icon }: { href: string; children: React.ReactNode, icon?: React.ReactNode }) => {
+    const isActive = pathname === href || (href === "/dashboard/chat" && pathname.startsWith("/dashboard/chat")); // Учитываем вложенные пути чата
     return (
-      <Link href={href} className={`group ${linkClass} ${fancyUnderline(isActive)}`}>
+      <Link href={href} className={`group relative ${linkClass} ${fancyUnderline(isActive)}`}>
+        {icon && <span className="mr-1.5">{icon}</span>}
         <span className="group-hover:bg-clip-text group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-indigo-500 group-hover:to-purple-500">
           {children}
         </span>
@@ -77,7 +67,6 @@ export default function NavBar() {
   );
 
   const renderLinks = () => {
-    // Теперь сравниваем с ROLE_NAMES
     if (currentRoleName === ROLE_NAMES.ANONYMOUS || !currentRoleName) {
       return (
         <>
@@ -92,6 +81,7 @@ export default function NavBar() {
           <NavLink href="/public/doctors">Врачи</NavLink>
           <NavLink href="/dashboard/patients/appointments">Мои приёмы</NavLink>
           <NavLink href="/dashboard/patients/medical_records">Мои медкарты</NavLink>
+          <NavLink href="/dashboard/chat" icon={<MessageSquareText size={16}/>}>Чат</NavLink> {/* Ссылка на чат */}
           <NavLink href="/dashboard/patients/profile">Профиль</NavLink>
           {LogoutBtn}
         </>
@@ -100,42 +90,39 @@ export default function NavBar() {
     if (currentRoleName === ROLE_NAMES.DOCTOR) {
       return (
         <>
-          {/* Можно добавить ссылку на свой профиль врача, если он есть */}
           <NavLink href="/dashboard/doctors/patients">Пациенты</NavLink>
           <NavLink href="/dashboard/doctors/appointments">Приёмы</NavLink>
-          <NavLink href="/dashboard/doctors/profile">Профиль</NavLink> {/* Пример */}
+          <NavLink href="/dashboard/chat" icon={<MessageSquareText size={16}/>}>Чат</NavLink> {/* Ссылка на чат */}
+          <NavLink href="/dashboard/doctors/profile">Профиль</NavLink>
           {LogoutBtn}
         </>
       );
     }
-    // ADMIN или SUPERADMIN (можно добавить более гранулярные проверки, если нужно)
     if (currentRoleName === ROLE_NAMES.ADMIN || currentRoleName === ROLE_NAMES.SUPERADMIN) {
       return (
         <>
           <NavLink href="/dashboard/doctors">Упр. врачи</NavLink>
           <NavLink href="/dashboard/patients">Упр. пациенты</NavLink>
           <NavLink href="/dashboard/appointments">Упр. приёмы</NavLink>
-          <NavLink href="/dashboard/profile">Профиль</NavLink> {/* У админов тоже есть свой профиль пользователя */}
+          {/* Админы тоже могут иметь чат, если это предусмотрено логикой */}
+          {/* <NavLink href="/dashboard/chat" icon={<MessageSquareText size={16}/>}>Чат</NavLink> */}
+          <NavLink href="/dashboard/profile">Профиль</NavLink>
           {LogoutBtn}
         </>
       );
     }
-    // На всякий случай, если роль какая-то неизвестная (не должно быть)
     return <NavLink href="/public/login">Войти</NavLink>;
   };
 
-  // Определяем базовый href для логотипа
-  let logoHref = "/public/doctors"; // По умолчанию для анонима
- 
-
+  let logoHref = "/public/doctors";
 
   return (
     <nav className="fixed top-0 w-full bg-white/60 backdrop-blur-md shadow-md z-50">
-      <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between"> {/* Уменьшил padding */}
         <Link href={logoHref} className="text-2xl font-bold text-indigo-600">
           Docker<span className="text-purple-500">Med</span>
         </Link>
-        <div className="flex space-x-6">{renderLinks()}</div>
+        <div className="flex space-x-3 md:space-x-5">{renderLinks()}</div> {/* Уменьшил space */}
       </div>
     </nav>
   );
