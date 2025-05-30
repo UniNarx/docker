@@ -11,7 +11,7 @@ interface NextWebpackOptions {
   isServer: boolean;
   defaultLoaders: any;
   nextRuntime?: 'nodejs' | 'edge';
-  webpack: any; // Тип для самого инстанса webpack
+  webpack: any; // Тип для самого инстанса
 }
 
 const nextConfig: NextConfig = {
