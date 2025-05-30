@@ -2,6 +2,7 @@
 const path = require('path');
 import { Configuration as WebpackConfiguration } from 'webpack'; // Импорт типов Webpack
 import { NextConfig } from 'next'; // Импорт типа NextConfig
+const BACKEND_API_URL_FOR_REWRITES = process.env.BACKEND_API_URL_FOR_REWRITES || 'http://backend:8080/api';
 
 // Определяем тип для опций, передаваемых в webpack функцию Next.js
 interface NextWebpackOptions {
@@ -21,10 +22,11 @@ const nextConfig: NextConfig = {
     domains: ['utfs.io', 'localhost'],
   },
   async rewrites() {
-    return [
+   return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8080/api/:path*',
+        // Используем переменную окружения для destination
+        destination: `${BACKEND_API_URL_FOR_REWRITES}/:path*`,
       },
     ]
   },
