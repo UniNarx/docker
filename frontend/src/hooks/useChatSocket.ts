@@ -13,7 +13,7 @@ import {
   ChatParticipant
 } from '@/types/chat';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws/chat';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'wss://docker-back-apdw.onrender.com/ws/chat';
 
 interface UseChatSocketProps {
   onOpen?: () => void;
