@@ -15,7 +15,7 @@ interface NextWebpackOptions {
 
 const nextConfig: NextConfig = {
   env: {
-    NEXT_PUBLIC_API_BASE: process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080',
+    NEXT_PUBLIC_API_BASE: process.env.NEXT_PUBLIC_API_BASE || 'https://uninarx-docker-a49a.twc1.net/api',
   },
   images: {
     domains: ['utfs.io', 'localhost'],
@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://backend:8080/api/:path*',
+        destination: 'http://localhost:8080/api/:path*',
       },
     ]
   },
