@@ -63,15 +63,15 @@ jobs:
           echo "Fetching doctors list..."
           curl -v http://localhost:3000/api/doctors || echo "Curl failed for /api/doctors"
           
-      - name: Test API - Login
-        run: |
-          echo "Attempting login..."
-          curl -v -X POST -H "Content-Type: application/json" \
-               -d '{"username":"${{ secrets.TEST_USER_LOGIN }}", "password":"${{ secrets.TEST_USER_PASSWORD }}"}' \
-               http://localhost:3000/api/auth/login || echo "Curl failed for /api/auth/login"
+      - name: Test API - Login (SuperAdmin)
         env:
-          TEST_USER_LOGIN: ${{ secrets.TEST_USER_LOGIN }}
-          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          SUPERADMIN_LOGIN: ${{ secrets.SUPERADMIN_USERNAME_COMPOSE_DEBUG }} # Убедитесь, что этот секрет создан в GitHub
+          SUPERADMIN_PASS: ${{ secrets.SUPERADMIN_PASSWORD_COMPOSE_DEBUG }}  # И этот тоже
+        run: |
+          echo "Attempting login as SuperAdmin with User: $SUPERADMIN_LOGIN"
+          curl -v -X POST -H "Content-Type: application/json" \
+               -d "{\"username\":\"$SUPERADMIN_LOGIN\", \"password\":\"$SUPERADMIN_PASS\"}" \
+               http://localhost:3000/api/auth/login || echo "Curl failed for SuperAdmin login"
 
       - name: Display Docker logs
         if: always()
