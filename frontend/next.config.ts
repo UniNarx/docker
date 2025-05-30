@@ -2,7 +2,7 @@
 const path = require('path');
 import { Configuration as WebpackConfiguration } from 'webpack'; // Импорт типов Webpack
 import { NextConfig } from 'next'; // Импорт типа NextConfig
-const BACKEND_API_URL_FOR_REWRITES = process.env.BACKEND_API_URL_FOR_REWRITES || 'http://backend:8080/api';
+const BACKEND_API_URL_FOR_REWRITES = process.env.BACKEND_API_URL_FOR_REWRITES || 'https://docker-back-apdw.onrender.com/api';
 
 // Определяем тип для опций, передаваемых в webpack функцию Next.js
 interface NextWebpackOptions {
