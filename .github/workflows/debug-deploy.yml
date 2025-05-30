@@ -48,12 +48,12 @@ jobs:
       #   run: docker-compose -f docker-compose.yml build
 
       - name: Start services
-        run: docker-compose -f docker-compose.yml up -d backend frontend
+        run: docker compose -f docker-compose.yml up -d backend frontend # ИЗМЕНЕНО
 
       - name: Wait for services
         run: |
           echo "Waiting for services to initialize..."
-          sleep 45 # Увеличьте если нужно больше времени на старт БД и приложений
+          sleep 45 
 
       - name: Check running containers
         run: docker ps -a
@@ -62,26 +62,24 @@ jobs:
         run: |
           echo "Fetching doctors list..."
           curl -v http://localhost:3000/api/doctors || echo "Curl failed for /api/doctors"
-          # `-v` для подробного вывода, `|| echo ...` чтобы шаг не падал если curl не 0
-
+          
       - name: Test API - Login
         run: |
           echo "Attempting login..."
-          # Используйте актуальные тестовые данные
           curl -v -X POST -H "Content-Type: application/json" \
                -d '{"username":"${{ secrets.TEST_USER_LOGIN }}", "password":"${{ secrets.TEST_USER_PASSWORD }}"}' \
                http://localhost:3000/api/auth/login || echo "Curl failed for /api/auth/login"
         env:
-          TEST_USER_LOGIN: ${{ secrets.TEST_USER_LOGIN }} # Добавьте эти секреты
+          TEST_USER_LOGIN: ${{ secrets.TEST_USER_LOGIN }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
 
       - name: Display Docker logs
         if: always()
         run: |
           echo "--- Docker Compose Logs ---"
-          docker-compose -f docker-compose.yml logs --tail="200" backend
-          docker-compose -f docker-compose.yml logs --tail="200" frontend
+          docker compose -f docker-compose.yml logs --tail="200" backend  # ИЗМЕНЕНО
+          docker compose -f docker-compose.yml logs --tail="200" frontend # ИЗМЕНЕНО
 
       - name: Stop services
         if: always()
-        run: docker-compose -f docker-compose.yml down
+        run: docker compose -f docker-compose.yml down
