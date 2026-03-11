@@ -1,0 +1,25 @@
+name: Keep Alive
+
+on:
+
+  schedule:
+
+    - cron: '*/13 * * * *' # Раз в 14 минут
+
+  workflow_dispatch: # Позволяет запустить кнопку "Run workflow" руками 
+
+jobs:
+
+  ping:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Ping my servers
+
+        run: |
+
+          curl https://docker-back-apdw.onrender.com/api/doctors
+
+          curl https://docker-front-qec1.onrender.com
