@@ -1,222 +1,234 @@
-// src/app/dashboard/appointments/[id]/edit/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { motion } from 'framer-motion';
+import { 
+  Calendar, 
+  User, 
+  Stethoscope, 
+  ChevronLeft, 
+  Save, 
+  Clock,
+  AlertCircle,
+  Loader2
+} from 'lucide-react';
 
-// Тип для данных записи на прием от API
+// --- Types ---
 type AppointmentData = {
-  _id: string;         // MongoDB ID
-  id?: string;          // Mongoose virtual ID
-  doctorId: string;    // было doctor_id, теперь ID профиля врача (строка)
-  patientId: string;   // было patient_id, теперь ID профиля пациента (строка)
-  apptTime: string;    // было appt_time (ISO строка)
-  status?: string;      // Статус, если приходит от API
-};
-
-// Тип для опций в выпадающих списках (врачи, пациенты)
-type SelectOption = {
-  value: string; // ID (строка)
-  label: string; // Имя для отображения
-};
-
-// Типы для данных, приходящих от /doctors и /patients API
-type ApiDoctorInfo = {
   _id: string;
-  id?: string;
-  firstName: string; // было first_name
-  lastName: string;  // было last_name
+  doctorId: string;
+  patientId: string;
+  apptTime: string;
+  status?: string;
 };
 
-type ApiPatientInfo = {
-  _id: string;
-  id?: string;
-  firstName: string; // было first_name
-  lastName: string;  // было last_name
-};
+type SelectOption = { value: string; label: string; };
+type ApiInfo = { _id: string; firstName: string; lastName: string; };
 
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans",
+  card: "max-w-xl w-full bg-white rounded-[45px] shadow-2xl shadow-blue-900/5 border-4 border-white p-10 relative overflow-hidden",
+  
+  header: "mb-10 text-center",
+  title: "text-3xl font-black text-[#1e3a8a] uppercase tracking-tighter leading-none mb-2",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]",
+  
+  form: "space-y-6",
+  fieldGroup: "relative",
+  label: "flex items-center gap-2 text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-3 ml-1",
+  
+  // Custom Select & Input
+  inputContainer: "relative group",
+  iconWrapper: "absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#1e3a8a] transition-colors",
+  input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-6 text-sm font-bold text-[#1e3a8a] outline-none focus:border-[#1e3a8a]/20 focus:bg-white transition-all appearance-none",
+  
+  // Buttons
+  btnSave: "w-full bg-[#1e3a8a] text-white rounded-[24px] py-5 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:hover:scale-100",
+  btnBack: "flex items-center justify-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-[#1e3a8a] transition-colors mt-8 w-full",
+  
+  errorBox: "bg-red-50 border-2 border-red-100 p-4 rounded-[20px] flex items-start gap-3 text-red-500 text-[11px] font-bold uppercase tracking-tight mb-6"
+};
 
 export default function EditAppointmentPage() {
   const params = useParams();
-  // apptIdParam уже строка, т.к. useParams возвращает строки для сегментов URL
   const apptIdParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
 
-  const [doctorOptions, setDoctorOptions]   = useState<SelectOption[]>([]);
+  const [doctorOptions, setDoctorOptions] = useState<SelectOption[]>([]);
   const [patientOptions, setPatientOptions] = useState<SelectOption[]>([]);
-  const [appointmentData, setAppointmentData] = useState<AppointmentData | null>(null); // Храним всю запись
-
-  // Состояния для полей формы - ID теперь строки
+  
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
-  const [appointmentTime, setAppointmentTime]   = useState(''); // Формат YYYY-MM-DDTHH:mm для datetime-local
+  const [appointmentTime, setAppointmentTime] = useState('');
 
-  const [error, setError]         = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving]     = useState(false);
-
-  /* — стили glassmorphism (остаются) — */
-  const glassCard  = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const glassInput = "w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400";
-  const btnBase    = "w-full py-2 rounded-lg font-medium transition-colors";
-  const btnSave    = "bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50";
-  const linkCancel = "mt-4 text-center text-indigo-300 hover:underline";
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!apptIdParam) {
-      setError("ID записи на приём не найден в URL.");
-      setIsLoading(false);
-      return;
-    }
+    if (!apptIdParam) return;
+    
     setIsLoading(true);
     Promise.all([
-      apiFetch<AppointmentData>(`/appointments/${apptIdParam}`), // Загружаем конкретную запись
-      apiFetch<ApiDoctorInfo[]>('/doctors'),      // Загружаем список врачей для <select>
-      apiFetch<ApiPatientInfo[]>('/patients'),    // Загружаем список пациентов для <select>
+      apiFetch<AppointmentData>(`/appointments/${apptIdParam}`),
+      apiFetch<ApiInfo[]>('/doctors'),
+      apiFetch<ApiInfo[]>('/patients'),
     ])
-      .then(([appt, doctorsList, patientsList]) => {
-        if (!appt) throw new Error("Запись на приём не найдена.");
-        setAppointmentData(appt);
-        setSelectedDoctorId(appt.doctorId); // doctorId должен быть строкой
-        setSelectedPatientId(appt.patientId); // patientId должен быть строкой
-
-        // Преобразование ISO строки appt.apptTime в формат для datetime-local (YYYY-MM-DDTHH:mm)
+      .then(([appt, docs, pats]) => {
+        setSelectedDoctorId(appt.doctorId);
+        setSelectedPatientId(appt.patientId);
+        
         const dt = new Date(appt.apptTime);
         const pad = (n: number) => n.toString().padStart(2, '0');
-        setAppointmentTime(
-          `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
-        );
+        setAppointmentTime(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`);
 
-        setDoctorOptions(doctorsList.map(d => ({
-            value: d._id || d.id || '', // ID врача (строка)
-            label: `${d.firstName} ${d.lastName}` // было first_name, last_name
-        })).filter(opt => opt.value)); // Фильтруем пустые value на всякий случай
-
-        setPatientOptions(patientsList.map(p => ({
-            value: p._id || p.id || '', // ID пациента (строка)
-            label: `${p.firstName} ${p.lastName}` // было first_name, last_name
-        })).filter(opt => opt.value));
+        setDoctorOptions(docs.map(d => ({ value: d._id, label: `Д-р ${d.firstName} ${d.lastName}` })));
+        setPatientOptions(pats.map(p => ({ value: p._id, label: `${p.firstName} ${p.lastName}` })));
       })
-      .catch(e => {
-        console.error("Ошибка загрузки данных для редактирования записи:", e);
-        setError(e.message || "Не удалось загрузить данные.");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      .catch(e => setError(e.message))
+      .finally(() => setIsLoading(false));
   }, [apptIdParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apptIdParam || !selectedDoctorId || !selectedPatientId || !appointmentTime) {
-        setError("Все поля должны быть заполнены.");
-        return;
-    }
     setIsSaving(true);
     setError(null);
 
-    // Преобразуем время из datetime-local в ISO строку для отправки на бэкенд
-    const isoApptTime = new Date(appointmentTime).toISOString();
-
     try {
-      // Отправляем PUT запрос на /api/appointments/:id (ID из URL)
-      // Бэкенд должен ожидать doctorId, patientId, apptTime в camelCase
-      await apiFetch<void>(`/appointments/${apptIdParam}`, { // ID записи в URL
+      await apiFetch(`/appointments/${apptIdParam}`, {
         method: 'PUT',
         body: JSON.stringify({
-          // ID самой записи (apptIdParam) обычно не передается в теле PUT, т.к. он в URL
-          doctorId: selectedDoctorId,    // было doctor_id
-          patientId: selectedPatientId,  // было patient_id
-          apptTime: isoApptTime,       // было appt_time
-          // Можно также передавать status, если он редактируется здесь
-          // status: appointmentData?.status || 'scheduled'
+          doctorId: selectedDoctorId,
+          patientId: selectedPatientId,
+          apptTime: new Date(appointmentTime).toISOString(),
         }),
       });
-      alert('Запись на приём успешно обновлена!');
-      router.push('/dashboard/appointments'); // Перенаправляем на список записей
+      router.push('/dashboard/appointments');
     } catch (err: any) {
-      console.error("Ошибка сохранения записи:", err);
-      setError(err.message || "Не удалось сохранить изменения.");
-    } finally {
+      setError(err.message);
       setIsSaving(false);
     }
   };
 
-  if (isLoading) return <p className="p-4 text-center text-gray-300">Загрузка данных записи...</p>;
-  if (error) return <p className="p-4 text-center text-red-400">Ошибка: {error}</p>;
-  if (!appointmentData) return <p className="p-4 text-center text-gray-300">Данные записи не найдены.</p>;
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <Loader2 className="w-10 h-10 text-[#1e3a8a] animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center p-4 !-mt-20">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-md w-full ${glassCard} p-6 space-y-6 text-white`}
+    <div className={styles.layout}>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300">
-          Редактировать приём #{apptIdParam}
-        </h1>
+        <div className={styles.header}>
+          <div className="w-16 h-16 bg-blue-50 rounded-[22px] flex items-center justify-center text-[#1e3a8a] mx-auto mb-6">
+            <Calendar size={32} />
+          </div>
+          <h1 className={styles.title}>Редактирование</h1>
+          <p className={styles.subtitle}>ID Записи: {apptIdParam?.slice(-8)}</p>
+        </div>
 
-        {error && <p className="text-red-500 bg-red-900/20 p-2 rounded-md text-center">{error}</p>}
+        {error && (
+          <div className={styles.errorBox}>
+            <AlertCircle size={18} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block space-y-1">
-            <span className="font-medium">Доктор</span>
-            <select
-              className={glassInput}
-              value={selectedDoctorId} // value теперь строка
-              onChange={e => setSelectedDoctorId(e.target.value)} // e.target.value уже строка
-              required
-            >
-              <option value="">— выберите доктора —</option>
-              {doctorOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-            </select>
-          </label>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          {/* Поле: Доктор */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              <Stethoscope size={12} /> Назначенный врач
+            </label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><User size={20} /></div>
+              <select
+                className={styles.input}
+                value={selectedDoctorId}
+                onChange={e => setSelectedDoctorId(e.target.value)}
+                required
+              >
+                <option value="">Выберите врача...</option>
+                {doctorOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+          </div>
 
-          <label className="block space-y-1">
-            <span className="font-medium">Пациент</span>
-            <select
-              className={glassInput}
-              value={selectedPatientId} // value теперь строка
-              onChange={e => setSelectedPatientId(e.target.value)} // e.target.value уже строка
-              required
-            >
-              <option value="">— выберите пациента —</option>
-              {patientOptions.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
-          </label>
+          {/* Поле: Пациент */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              <User size={12} /> Пациент
+            </label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><UsersIcon size={20} /></div>
+              <select
+                className={styles.input}
+                value={selectedPatientId}
+                onChange={e => setSelectedPatientId(e.target.value)}
+                required
+              >
+                <option value="">Выберите пациента...</option>
+                {patientOptions.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+          </div>
 
-          <label className="block space-y-1">
-            <span className="font-medium">Дата и время</span>
-            <input
-              type="datetime-local"
-              className={glassInput}
-              value={appointmentTime}
-              onChange={e => setAppointmentTime(e.target.value)}
-              required
-            />
-          </label>
+          {/* Поле: Дата/Время */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              <Clock size={12} /> Время приема
+            </label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Calendar size={20} /></div>
+              <input
+                type="datetime-local"
+                className={styles.input}
+                value={appointmentTime}
+                onChange={e => setAppointmentTime(e.target.value)}
+                required
+              />
+            </div>
+          </div>
 
           <button
             type="submit"
-            disabled={isSaving || isLoading}
-            className={`${btnBase} ${btnSave}`}
+            disabled={isSaving}
+            className={styles.btnSave}
           >
-            {isSaving ? 'Сохраняем…' : 'Сохранить'}
+            {isSaving ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <><Save size={18} /> Обновить данные</>
+            )}
           </button>
         </form>
 
         <button 
-            onClick={() => router.back()} 
-            className={`${linkCancel} w-full py-2`} // Сделал похожим на кнопку для консистентности
-            disabled={isSaving || isLoading}
+          onClick={() => router.back()} 
+          className={styles.btnBack}
         >
-          Отмена
+          <ChevronLeft size={14} strokeWidth={3} />
+          Вернуться назад
         </button>
       </motion.div>
     </div>
+  );
+}
+
+// Вспомогательная иконка для пациентов
+function UsersIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
   );
 }

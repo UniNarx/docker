@@ -1,10 +1,11 @@
-// src/app/public/register/page.tsx
+/* src/app/public/register/page.tsx */
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 import { motion } from 'framer-motion'
+import { UserPlus, User, Lock, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -17,89 +18,97 @@ export default function RegisterPage() {
     e.preventDefault()
     setError(null)
     try {
-      const { id } = await apiFetch<{ id: number }>('/auth/register', {
+      await apiFetch<{ id: number }>('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       })
-      console.log('New user id =', id)
       setSuccess(true)
-      setTimeout(() => router.push('/public/login'), 1500)
+      setTimeout(() => router.push('/public/login'), 2000)
     } catch (err: any) {
       setError(err.message)
     }
   }
 
-  // стили
-  const glassCard   = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl !-mt-20"
-  const glassInput  = "w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-  const btnBase     = "w-full py-2 rounded-lg font-medium transition-colors"
-  const btnRegister = "bg-gradient-to-r from-green-400 to-teal-400 text-white hover:from-teal-400 hover:to-green-400"
+  const styles = {
+    card: "max-w-md w-full bg-white rounded-[40px] shadow-2xl shadow-slate-900/10 border-4 border-white p-10 relative overflow-hidden",
+    input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-12 pr-4 text-sm font-bold text-[#1e3a8a] outline-none focus:border-emerald-500/20 focus:bg-white transition-all placeholder:text-slate-300",
+    label: "text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-4 block",
+    btnPrimary: "w-full bg-emerald-500 text-white rounded-[24px] py-5 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-emerald-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mt-4",
+    btnBack: "absolute top-6 left-6 text-slate-300 hover:text-indigo-600 transition-colors"
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center p-4">
-      <motion.div
+    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6">
+      <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-sm w-full ${glassCard} p-8 space-y-6`}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300 text-center">
-          Регистрация
-        </h1>
+        <button onClick={() => router.push('/public/login')} className={styles.btnBack}>
+          <ArrowLeft size={20} />
+        </button>
+
+        <div className="text-center mb-10">
+          <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-[22px] flex items-center justify-center mx-auto mb-4 border-2 border-white shadow-inner">
+            <UserPlus size={28} />
+          </div>
+          <h1 className="text-3xl font-black text-[#1e3a8a] tracking-tighter">Регистрация</h1>
+          <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mt-1">Присоединяйтесь к DockerMed</p>
+        </div>
 
         {error && (
-          <div className="text-red-400 bg-red-900/30 border border-red-600 rounded-lg px-4 py-2">
-            Ошибка: {error}
-          </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-red-50 text-red-500 p-4 rounded-[20px] text-[10px] font-black uppercase flex items-center gap-3 mb-6 border-2 border-red-100">
+            <AlertCircle size={16} /> {error}
+          </motion.div>
         )}
 
         {success ? (
-          <div className="text-green-400 bg-green-900/30 border border-green-600 rounded-lg px-4 py-2 text-center">
-            Успешно зарегистрированы!<br />Переадресация…
-          </div>
+          <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center py-10">
+            <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-200">
+              <CheckCircle2 size={40} />
+            </div>
+            <h2 className="text-xl font-black text-[#1e3a8a] mb-2">Готово!</h2>
+            <p className="text-slate-400 text-xs font-bold">Аккаунт создан. Переходим к входу...</p>
+          </motion.div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block mb-1 text-gray-200">Логин</label>
-              <input
-                type="text"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                className={glassInput}
-                placeholder="Ваш логин"
-                required
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="relative">
+              <label className={styles.label}>Новый логин</label>
+              <User className="absolute left-4 bottom-[18px] text-slate-300" size={18} />
+              <input 
+                type="text" 
+                value={username} 
+                onChange={e => setUsername(e.target.value)} 
+                className={styles.input} 
+                placeholder="my_profile_2024"
+                required 
               />
             </div>
-            <div>
-              <label className="block mb-1 text-gray-200">Пароль</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className={glassInput}
-                placeholder="••••••••"
-                required
+
+            <div className="relative">
+              <label className={styles.label}>Пароль</label>
+              <Lock className="absolute left-4 bottom-[18px] text-slate-300" size={18} />
+              <input 
+                type="password" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                className={styles.input} 
+                placeholder="минимум 6 символов"
+                required 
               />
             </div>
-            <button
-              type="submit"
-              className={`${btnBase} ${btnRegister}`}
-            >
-              Зарегистрироваться
+
+            <button type="submit" className={styles.btnPrimary}>
+              Создать аккаунт
             </button>
           </form>
         )}
 
-        <p className="mt-4 text-center text-sm text-gray-300">
-          Уже есть аккаунт?{' '}
-          <button
-            type="button"
-            onClick={() => router.push('/public/login')}
-            className="text-indigo-300 hover:underline"
-          >
-            Войти
-          </button>
-        </p>
+        {!success && (
+          <p className="mt-8 text-center text-[9px] font-black text-slate-300 uppercase tracking-widest">
+            Нажимая кнопку, вы соглашаетесь с правилами клиники
+          </p>
+        )}
       </motion.div>
     </div>
   )

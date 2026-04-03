@@ -1,195 +1,208 @@
-// src/app/dashboard/appointments/create/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { motion } from 'framer-motion';
+import { 
+  CalendarPlus, 
+  User, 
+  Stethoscope, 
+  ChevronLeft, 
+  PlusCircle, 
+  Clock,
+  AlertCircle,
+  Loader2,
+  Users
+} from 'lucide-react';
 
-// Тип для опций в выпадающих списках
-type SelectOption = {
-  value: string; // ID (строка)
-  label: string; // Имя для отображения
-};
+// --- Types ---
+type SelectOption = { value: string; label: string; };
+type ApiNameRecord = { _id: string; firstName: string; lastName: string; };
 
-// Тип для записей (врачей/пациентов), получаемых от API
-type ApiNameRecord = {
-  _id: string;   // MongoDB ID
-  id?: string;    // Mongoose virtual ID
-  firstName: string; // было first_name
-  lastName: string;  // было last_name
-  // другие поля, если они приходят и нужны
-};
-
-// Тип для ответа API при создании записи (если он есть)
-type CreatedAppointmentResponse = {
-    _id: string;
-    id?: string;
-    // ...другие поля созданной записи
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans",
+  card: "max-w-xl w-full bg-white rounded-[45px] shadow-2xl shadow-teal-900/5 border-4 border-white p-10 relative overflow-hidden",
+  
+  header: "mb-10 text-center",
+  title: "text-3xl font-black text-[#134e4a] uppercase tracking-tighter leading-none mb-2",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]",
+  
+  form: "space-y-6",
+  fieldGroup: "relative",
+  label: "flex items-center gap-2 text-[10px] font-black text-[#134e4a] uppercase tracking-widest mb-3 ml-1",
+  
+  inputContainer: "relative group",
+  iconWrapper: "absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-teal-600 transition-colors",
+  input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-6 text-sm font-bold text-[#134e4a] outline-none focus:border-teal-500/20 focus:bg-white transition-all appearance-none disabled:opacity-50",
+  
+  btnCreate: "w-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-[24px] py-5 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-teal-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50",
+  btnBack: "flex items-center justify-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-teal-600 transition-colors mt-8 w-full",
+  
+  errorBox: "bg-red-50 border-2 border-red-100 p-4 rounded-[20px] flex items-start gap-3 text-red-500 text-[11px] font-bold uppercase tracking-tight mb-6"
 };
 
 export default function AppointmentCreatePage() {
   const router = useRouter();
 
-  const [doctorOptions, setDoctorOptions]   = useState<SelectOption[]>([]);
+  const [doctorOptions, setDoctorOptions] = useState<SelectOption[]>([]);
   const [patientOptions, setPatientOptions] = useState<SelectOption[]>([]);
-
-  // ID теперь строки
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(''); // было doctorId: number
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(''); // было patientId: number
-
+  
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [appointmentTime, setAppointmentTime] = useState<string>(() => {
     const d = new Date();
     const pad = (n: number) => n.toString().padStart(2, '0');
-    // Формат для datetime-local input
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   });
 
-  const [error, setError]       = useState<string | null>(null);
-  const [isSaving, setIsSaving]   = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // Для загрузки справочников
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  /* — стили glassmorphism (остаются) — */
-  const glassCard  = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const glassInput = "w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-400";
-  const btnBase    = "w-full py-2 rounded-lg font-medium transition-colors";
-  const btnSave    = "bg-gradient-to-r from-green-400 to-teal-400 text-white hover:from-teal-400 hover:to-green-400 disabled:opacity-50";
-  const errorBox   = "text-red-400 bg-red-900/30 border border-red-600 rounded-lg px-4 py-2";
-
-  /* — Загрузка справочников (врачи и пациенты) — */
   useEffect(() => {
     setIsLoading(true);
     Promise.all([
       apiFetch<ApiNameRecord[]>('/doctors'),
       apiFetch<ApiNameRecord[]>('/patients'),
     ])
-    .then(([doctorsList, patientsList]) => {
-      setDoctorOptions(
-        doctorsList.map(d => ({
-          value: d._id || d.id || '', // Используем _id или id как строку
-          label: `${d.firstName} ${d.lastName}` // было first_name, last_name
-        })).filter(opt => opt.value) // Убираем опции с пустым value, если такие могут быть
-      );
-      setPatientOptions(
-        patientsList.map(p => ({
-          value: p._id || p.id || '', // Используем _id или id как строку
-          label: `${p.firstName} ${p.lastName}` // было first_name, last_name
-        })).filter(opt => opt.value)
-      );
+    .then(([docs, pats]) => {
+      setDoctorOptions(docs.map(d => ({ value: d._id, label: `Д-р ${d.firstName} ${d.lastName}` })));
+      setPatientOptions(pats.map(p => ({ value: p._id, label: `${p.firstName} ${p.lastName}` })));
     })
-    .catch((err) => {
-        console.error("Ошибка загрузки справочников:", err);
-        setError(err.message || "Не удалось загрузить списки врачей/пациентов.");
-    })
-    .finally(() => {
-        setIsLoading(false);
-    });
+    .catch(err => setError(err.message))
+    .finally(() => setIsLoading(false));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDoctorId || !selectedPatientId || !appointmentTime) {
-      setError("Необходимо выбрать доктора, пациента и указать время приёма.");
+      setError("Заполните все обязательные поля");
       return;
     }
     setIsSaving(true);
     setError(null);
 
-    // Преобразуем время из datetime-local в ISO строку для отправки на бэкенд
-    const isoApptTime = new Date(appointmentTime).toISOString();
-    // .replace(/\.\d{3}Z$/, 'Z'); // Убираем миллисекунды, если бэкенд их не ожидает или это вызывает проблемы
-
     try {
-      // Бэкенд (createAppointment) ожидает doctorId, patientId, apptTime (camelCase)
-      await apiFetch<CreatedAppointmentResponse>('/appointments', {
+      await apiFetch('/appointments', {
         method: 'POST',
         body: JSON.stringify({
-          doctorId: selectedDoctorId,    // было doctor_id
-          patientId: selectedPatientId,  // было patient_id
-          apptTime: isoApptTime,         // было appt_time
+          doctorId: selectedDoctorId,
+          patientId: selectedPatientId,
+          apptTime: new Date(appointmentTime).toISOString(),
         }),
       });
-      alert('Запись на приём успешно создана!');
-      router.push('/dashboard/appointments'); // Перенаправляем на список всех записей
+      router.push('/dashboard/appointments');
     } catch (err: any) {
-      console.error("Ошибка создания записи на приём:", err);
-      setError(err.message || "Не удалось создать запись.");
-    } finally {
+      setError(err.message);
       setIsSaving(false);
     }
   };
 
-  if (isLoading) return <p className="p-6 text-center text-gray-300">Загрузка данных...</p>;
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <Loader2 className="w-10 h-10 text-teal-500 animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center p-4 !-mt-20">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-md w-full ${glassCard} p-6 space-y-6 text-white`}
+    <div className={styles.layout}>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-green-300 to-teal-300">
-          Создать приём
-        </h1>
+        <div className={styles.header}>
+          <div className="w-16 h-16 bg-teal-50 rounded-[22px] flex items-center justify-center text-teal-600 mx-auto mb-6">
+            <CalendarPlus size={32} />
+          </div>
+          <h1 className={styles.title}>Новый приём</h1>
+          <p className={styles.subtitle}>Резервирование времени в графике</p>
+        </div>
 
-        {error && <div className={errorBox}>{error}</div>}
+        {error && (
+          <div className={styles.errorBox}>
+            <AlertCircle size={18} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block space-y-1">
-            <span className="font-medium">Доктор</span>
-            <select
-              name="doctorId" // Добавил name для ясности
-              className={glassInput}
-              value={selectedDoctorId} // value теперь строка
-              onChange={e => setSelectedDoctorId(e.target.value)} // e.target.value уже строка
-              required
-              disabled={isLoading}
-            >
-              <option value="">— выберите доктора —</option>
-              {doctorOptions.map(d => (
-                <option key={d.value} value={d.value}>{d.label}</option>
-              ))}
-            </select>
-          </label>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          {/* Доктор */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              <Stethoscope size={12} /> Выбор специалиста
+            </label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Stethoscope size={20} /></div>
+              <select
+                className={styles.input}
+                value={selectedDoctorId}
+                onChange={e => setSelectedDoctorId(e.target.value)}
+                required
+              >
+                <option value="">Выберите врача...</option>
+                {doctorOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+          </div>
 
-          <label className="block space-y-1">
-            <span className="font-medium">Пациент</span>
-            <select
-              name="patientId" // Добавил name
-              className={glassInput}
-              value={selectedPatientId} // value теперь строка
-              onChange={e => setSelectedPatientId(e.target.value)} // e.target.value уже строка
-              required
-              disabled={isLoading}
-            >
-              <option value="">— выберите пациента —</option>
-              {patientOptions.map(p => (
-                <option key={p.value} value={p.value}>{p.label}</option>
-              ))}
-            </select>
-          </label>
+          {/* Пациент */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              <User size={12} /> Данные пациента
+            </label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Users size={20} /></div>
+              <select
+                className={styles.input}
+                value={selectedPatientId}
+                onChange={e => setSelectedPatientId(e.target.value)}
+                required
+              >
+                <option value="">Выберите пациента...</option>
+                {patientOptions.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+          </div>
 
-          <label className="block space-y-1">
-            <span className="font-medium">Дата и время</span>
-            <input
-              type="datetime-local"
-              className={glassInput}
-              value={appointmentTime}
-              onChange={e => setAppointmentTime(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </label>
+          {/* Дата/Время */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              <Clock size={12} /> Желаемое время
+            </label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Clock size={20} /></div>
+              <input
+                type="datetime-local"
+                className={styles.input}
+                value={appointmentTime}
+                onChange={e => setAppointmentTime(e.target.value)}
+                required
+              />
+            </div>
+          </div>
 
           <button
             type="submit"
-            disabled={isSaving || isLoading} // Блокируем и во время загрузки справочников
-            className={`${btnBase} ${btnSave}`}
+            disabled={isSaving}
+            className={styles.btnCreate}
           >
-            {isSaving ? 'Создаю…' : 'Создать приём'}
+            {isSaving ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <><PlusCircle size={18} /> Создать запись</>
+            )}
           </button>
         </form>
+
+        <button 
+          onClick={() => router.back()} 
+          className={styles.btnBack}
+        >
+          <ChevronLeft size={14} strokeWidth={3} />
+          Отмена и выход
+        </button>
       </motion.div>
     </div>
   );

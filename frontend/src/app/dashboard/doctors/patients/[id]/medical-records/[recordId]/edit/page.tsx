@@ -1,194 +1,196 @@
-// src/app/dashboard/doctors/patients/[patientId]/medical_records/[recordId]/edit/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  Edit3, 
+  Calendar, 
+  FileText, 
+  Trash2, 
+  Save, 
+  ArrowLeft, 
+  Loader2, 
+  AlertTriangle,
+  History
+} from 'lucide-react'
 
-// Тип для данных медкарты
+// --- Types ---
 type MedicalRecordData = {
-  _id: string; // Ожидаем _id от бэкенда
-  id?: string;  // Mongoose virtual id
-  patientId: string; // было patient_id, теперь строка ObjectId
-  doctorId: string;  // было doctor_id, теперь строка ObjectId
-  visitDate: string; // было visit_date (строка YYYY-MM-DD или ISO)
+  _id: string;
+  id?: string;
+  visitDate: string;
   notes?: string;
   attachments?: string[];
 };
 
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans",
+  card: "max-w-2xl w-full bg-white rounded-[40px] shadow-2xl shadow-indigo-900/5 border-4 border-white p-10 relative overflow-hidden",
+  
+  header: "mb-10 text-center",
+  title: "text-3xl font-black text-[#1e3a8a] uppercase tracking-tighter leading-none mb-2",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]",
+  
+  form: "space-y-6",
+  label: "flex items-center gap-2 text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-3 ml-1",
+  
+  inputContainer: "relative group",
+  iconWrapper: "absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors",
+  input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-6 text-sm font-bold text-[#1e3a8a] outline-none focus:border-indigo-500/20 focus:bg-white transition-all",
+  textarea: "w-full bg-slate-50 border-2 border-slate-100 rounded-[25px] py-5 pl-14 pr-6 text-sm font-bold text-[#1e3a8a] outline-none focus:border-indigo-500/20 focus:bg-white transition-all min-h-[180px] resize-none",
+  
+  // Actions
+  actionGrid: "grid grid-cols-1 sm:grid-cols-2 gap-4 mt-10",
+  btnSave: "bg-[#1e3a8a] text-white rounded-[22px] py-4 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-indigo-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50",
+  btnDelete: "bg-white border-2 border-red-50 text-red-400 rounded-[22px] py-4 font-black text-[11px] uppercase tracking-[0.2em] hover:bg-red-50 hover:text-red-500 transition-all flex items-center justify-center gap-3 disabled:opacity-50",
+  
+  btnBack: "flex items-center justify-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-indigo-600 transition-colors mt-8 w-full",
+  
+  dangerZone: "mt-8 pt-8 border-t border-slate-50"
+};
+
 export default function EditMedicalRecordPage() {
   const params = useParams();
-  // patientIdParam здесь не используется для загрузки/сохранения самой записи, но может быть полезен для навигации
-  // const patientIdParam = Array.isArray(params.patientId) ? params.patientId[0] : params.patientId;
   const recordIdParam = Array.isArray(params.recordId) ? params.recordId[0] : params.recordId;
-
   const router = useRouter();
 
   const [medicalRecord, setMedicalRecord] = useState<MedicalRecordData | null>(null);
-  const [notes, setNotes]                 = useState('');
-  const [visitDate, setVisitDate]         = useState(''); // Формат YYYY-MM-DD для input
-  // Для управления вложениями (если нужно будет их редактировать)
-  // const [currentAttachments, setCurrentAttachments] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  const [visitDate, setVisitDate] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [saving, setSaving]               = useState(false);
-  const [isLoading, setIsLoading]         = useState(true);
-  const [error, setError]                 = useState<string | null>(null);
-
-
-  /* — стили «glass & dark» — */
-  const glassCard  = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const glassInput = "w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400";
-  const btnBase    = "px-4 py-2 rounded-lg font-medium transition-colors";
-  const btnSave    = "bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50";
-  const btnDelete  = "bg-gradient-to-r from-red-500 to-pink-500 text-white hover:from-pink-500 hover:to-red-500 disabled:opacity-50";
-  const linkCancel = "text-indigo-300 hover:underline";
-
-  /* — Загрузка медицинской записи — */
   useEffect(() => {
-    if (!recordIdParam) {
-      setError("ID медицинской записи не найден в URL.");
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
+    if (!recordIdParam) return;
+    
     apiFetch<MedicalRecordData>(`/medical-records/${recordIdParam}`)
       .then(data => {
-        if (!data) throw new Error("Медицинская запись не найдена.");
         setMedicalRecord(data);
-        // API возвращает дату как строку (обычно ISO), берем только YYYY-MM-DD для input type="date"
         setVisitDate(data.visitDate ? data.visitDate.slice(0, 10) : '');
         setNotes(data.notes ?? '');
-        // setCurrentAttachments(data.attachments ?? []);
       })
-      .catch(e => {
-        console.error(`Ошибка загрузки медкарты ${recordIdParam}:`, e);
-        setError(e.message);
-      })
+      .catch(e => setError(e.message))
       .finally(() => setIsLoading(false));
   }, [recordIdParam]);
 
-  /* — Сохранение изменений — */
   const handleSave = async () => {
-    if (!visitDate) {
-      alert('Укажите дату визита');
-      return;
-    }
-    if (!medicalRecord) {
-        alert('Данные медкарты не загружены.');
-        return;
-    }
+    if (!visitDate) return alert('Укажите дату');
     setSaving(true);
-    setError(null);
     try {
-      // Бэкенд (updateMedicalRecord) ожидает visitDate, notes, attachments
-      await apiFetch<void>(`/medical-records/${medicalRecord._id || medicalRecord.id}`, { // Используем _id или id из загруженной записи
+      await apiFetch(`/medical-records/${medicalRecord?._id || medicalRecord?.id}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          visitDate: visitDate,       // было visit_date
-          notes,
-          attachments: medicalRecord.attachments ?? [], // Отправляем текущие вложения (редактирование самих файлов - отдельная задача)
-        }),
+        body: JSON.stringify({ visitDate, notes, attachments: medicalRecord?.attachments || [] }),
       });
-      alert('Медицинская запись успешно сохранена!');
-      router.back(); // Возвращаемся на предыдущую страницу
+      router.back();
     } catch (e: any) {
-      console.error("Ошибка сохранения медкарты:", e);
       setError(e.message);
-      alert('Ошибка при сохранении: ' + e.message);
     } finally {
       setSaving(false);
     }
   };
 
-  /* — Удаление медицинской записи — */
   const handleDelete = async () => {
-    if (!medicalRecord || !(medicalRecord._id || medicalRecord.id)) {
-        alert('Данные медкарты не загружены или ID отсутствует.');
-        return;
-    }
-    if (!confirm('Удалить эту медицинскую запись безвозвратно?')) return;
-    setSaving(true); // Блокируем кнопки на время удаления
-    setError(null);
+    if (!confirm('Вы уверены? Это действие удалит запись из истории болезни навсегда.')) return;
+    setSaving(true);
     try {
-      await apiFetch<void>(`/medical-records/${medicalRecord._id || medicalRecord.id}`, { method: 'DELETE' });
-      alert('Медицинская запись удалена.');
-      router.back(); // или router.push(`/dashboard/doctors/patients/${patientIdParam}`);
+      await apiFetch(`/medical-records/${medicalRecord?._id || medicalRecord?.id}`, { method: 'DELETE' });
+      router.back();
     } catch (e: any) {
-      console.error("Ошибка удаления медкарты:", e);
       setError(e.message);
-      alert('Ошибка при удалении: ' + e.message);
-    } finally {
       setSaving(false);
     }
   };
 
-  if (isLoading) return <p className="p-4 text-center text-gray-300">Загрузка медицинской записи...</p>;
-  if (error) return <p className="p-4 text-center text-red-400">{error}</p>;
-  if (!medicalRecord) return <p className="p-4 text-center text-gray-300">Медицинская запись не найдена.</p>;
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 p-8 flex items-center justify-center !-mt-20">
-      <motion.div
+    <div className={styles.layout}>
+      <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-xl w-full ${glassCard} p-6 space-y-6 text-white`}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
-          Редактирование записи #{medicalRecord._id || medicalRecord.id}
-        </h1>
-
-        <label className="block space-y-1">
-          <span className="font-medium">Дата визита</span>
-          <input
-            type="date"
-            value={visitDate}
-            onChange={e => setVisitDate(e.target.value)}
-            className={glassInput}
-            required
-          />
-        </label>
-
-        <label className="block space-y-1">
-          <span className="font-medium">Заметки</span>
-          <textarea
-            rows={6} // Увеличил немного
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            className={`${glassInput} resize-y`}
-            placeholder="Введите заметки, диагноз, назначения..."
-          />
-        </label>
-
-        {/* TODO: Добавить интерфейс для управления вложениями (просмотр, удаление, добавление новых) */}
-        {/* medicalRecord.attachments */}
-
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <button
-            onClick={handleSave}
-            disabled={saving || isLoading}
-            className={`${btnBase} ${btnSave} w-full sm:w-auto flex-grow`}
-          >
-            {saving ? 'Сохраняем…' : 'Сохранить'}
-          </button>
-
-          <button
-            onClick={handleDelete}
-            disabled={saving || isLoading}
-            className={`${btnBase} ${btnDelete} w-full sm:w-auto`}
-          >
-            Удалить
-          </button>
-
-          <button
-            onClick={() => router.back()}
-            className={`${linkCancel} w-full sm:w-auto py-2 text-center`} // Стилизовал как кнопку для консистентности
-            disabled={saving || isLoading}
-          >
-            Отмена
-          </button>
+        <div className={styles.header}>
+          <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-[22px] flex items-center justify-center mx-auto mb-6">
+            <History size={32} />
+          </div>
+          <h1 className={styles.title}>Коррекция записи</h1>
+          <p className={styles.subtitle}>Правка клинических данных</p>
         </div>
+
+        {error && (
+          <div className="bg-red-50 border-2 border-red-100 p-4 rounded-[22px] flex items-center gap-3 text-red-500 text-[10px] font-black uppercase mb-6">
+            <AlertTriangle size={18} /> {error}
+          </div>
+        )}
+
+        <div className={styles.form}>
+          {/* Visit Date */}
+          <div className="relative">
+            <label className={styles.label}><Calendar size={12} /> Дата визита</label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Calendar size={18} /></div>
+              <input
+                type="date"
+                value={visitDate}
+                onChange={e => setVisitDate(e.target.value)}
+                className={styles.input}
+              />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="relative">
+            <label className={styles.label}><FileText size={12} /> Клиническая картина</label>
+            <div className={styles.inputContainer}>
+              <div className={`${styles.iconWrapper} top-8`}><Edit3 size={18} /></div>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className={styles.textarea}
+                placeholder="Обновите симптомы, диагноз или рекомендации..."
+              />
+            </div>
+          </div>
+
+          <div className={styles.actionGrid}>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className={styles.btnSave}
+            >
+              {saving ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /> Сохранить</>}
+            </button>
+
+            <button
+              onClick={() => router.back()}
+              className="bg-slate-50 text-slate-500 rounded-[22px] py-4 font-black text-[11px] uppercase tracking-[0.2em] hover:bg-slate-100 transition-all text-center"
+            >
+              Отмена
+            </button>
+          </div>
+
+          <div className={styles.dangerZone}>
+            <button
+              onClick={handleDelete}
+              disabled={saving}
+              className={styles.btnDelete}
+            >
+              <Trash2 size={18} /> Удалить запись из базы
+            </button>
+          </div>
+        </div>
+
+        <button onClick={() => router.back()} className={styles.btnBack}>
+          <ArrowLeft size={14} strokeWidth={3} /> Назад к профилю пациента
+        </button>
       </motion.div>
     </div>
   );

@@ -1,136 +1,169 @@
-// src/app/dashboard/profile/edit/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 import { motion } from 'framer-motion'
+import { 
+  Edit, 
+  ChevronLeft, 
+  Loader2, 
+  Check, 
+  AlertCircle, 
+  User,
+  RefreshCw
+} from 'lucide-react'
 
-// Тип для ответа от /api/users/me
+// --- Types ---
 type UserMeResponse = {
-  message?: string; // Опционально, если есть
   data: {
     id: string;
     username: string;
-    roleId: string;
     roleName: string;
   };
 };
 
-// Тип для ответа при успешном обновлении (если API что-то возвращает)
-// Если API возвращает 200 ОК или 204 No Content без тела, то можно использовать <void>
-type UpdateUserResponse = { // Или void, если тело ответа пустое
+type UpdateUserResponse = {
     message?: string;
-    // Можно ожидать обновленный объект пользователя, если API его возвращает
-    // user?: { username: string; ... }
 };
 
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans",
+  card: "max-w-md w-full bg-white rounded-[40px] shadow-2xl shadow-slate-900/10 border-4 border-white p-10 relative overflow-hidden",
+  
+  header: "mb-10 text-center",
+  iconCircle: "w-16 h-16 bg-indigo-50 text-indigo-600 rounded-[22px] flex items-center justify-center mx-auto mb-6 border-2 border-white shadow-inner",
+  title: "text-2xl font-black text-[#1e3a8a] uppercase tracking-tighter leading-none mb-2",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]",
+  
+  form: "space-y-6",
+  label: "flex items-center gap-2 text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-3 ml-1",
+  
+  inputContainer: "relative group",
+  iconWrapper: "absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors",
+  input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-6 text-sm font-bold text-[#1e3a8a] outline-none focus:border-indigo-500/20 focus:bg-white transition-all",
+  
+  btnSave: "w-full bg-[#1e3a8a] text-white rounded-[24px] py-5 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-30 disabled:hover:scale-100 disabled:bg-slate-200 disabled:text-slate-400 mt-4",
+  btnBack: "flex items-center justify-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-indigo-600 transition-colors mt-8 w-full",
+};
 
 export default function ProfileEditPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
-  const [initialUsername, setInitialUsername] = useState(''); // Для отслеживания изменений
+  const [initialUsername, setInitialUsername] = useState('');
   const [error, setError] = useState<string|null>(null);
   const [saving, setSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  /* — glassmorphism styles — */
-  const glassCard   = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const glassInput  = "w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400";
-  const btnBase     = "w-full py-2 rounded-lg font-medium transition-colors";
-  const btnSave     = "bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50";
-  const errorBox    = "text-red-400 bg-red-900/30 border border-red-600 rounded-lg px-4 py-2";
-
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-    apiFetch<UserMeResponse>('/users/me') // Используем обновленный тип
+    apiFetch<UserMeResponse>('/users/me')
       .then(response => {
-        if (response && response.data && response.data.username) {
+        if (response?.data?.username) {
           setUsername(response.data.username);
-          setInitialUsername(response.data.username); // Сохраняем начальное имя
-        } else {
-          throw new Error("Не удалось получить имя пользователя.");
+          setInitialUsername(response.data.username);
         }
       })
-      .catch(e => {
-        console.error("Ошибка загрузки профиля:", e);
-        setError(e.message || "Не удалось загрузить данные профиля.");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      .catch(e => setError(e.message))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => { // Переименовал handle в handleSubmit
+  const isUnchanged = username.trim() === initialUsername || !username.trim();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) {
-        setError("Имя пользователя не может быть пустым.");
-        return;
-    }
-    if (username.trim() === initialUsername) {
-        setError("Новое имя пользователя совпадает со старым.");
-        return;
-    }
+    if (isUnchanged) return;
 
     setSaving(true);
     setError(null);
     try {
-      // Бэкенд должен ожидать { username: "новое_имя" }
-      await apiFetch<UpdateUserResponse>('/users/me', { // Указываем ожидаемый тип ответа
+      await apiFetch<UpdateUserResponse>('/users/me', {
         method: 'PUT',
-        body: JSON.stringify({ username: username.trim() }), // Отправляем только username
+        body: JSON.stringify({ username: username.trim() }),
       });
-      alert("Имя пользователя успешно изменено!");
-      router.push('/dashboard/profile'); // Перенаправляем на страницу профиля
+      alert("Идентификатор успешно обновлен");
+      router.push('/dashboard/profile');
     } catch (err: any) {
-      console.error("Ошибка сохранения имени пользователя:", err);
-      setError(err.message || "Не удалось сохранить изменения.");
+      setError(err.message || "Ошибка при сохранении");
     } finally {
       setSaving(false);
     }
   };
 
-  if (isLoading) {
-    return <div className="p-6 text-center text-gray-300">Загрузка данных профиля...</div>;
-  }
+  if (isLoading) return (
+    <div className={styles.layout}>
+      <Loader2 className="animate-spin text-indigo-500" size={32} />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center p-4 !-mt-20">
+    <div className={styles.layout}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-md w-full ${glassCard} p-6 space-y-6 text-white`}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300">
-          Сменить username
-        </h1>
+        <header className={styles.header}>
+          <div className={styles.iconCircle}>
+            <Edit size={32} strokeWidth={2.5} />
+          </div>
+          <h1 className={styles.title}>Смена ID</h1>
+          <p className={styles.subtitle}>Обновление имени пользователя</p>
+        </header>
 
-        {error && <div className={errorBox}>{error}</div>}
+        {error && (
+          <div className="bg-red-50 border-2 border-red-100 p-4 rounded-[22px] flex items-center gap-3 text-red-500 text-[10px] font-black uppercase mb-8">
+            <AlertCircle size={18} /> {error}
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block space-y-1">
-            <span className="font-medium">Username</span>
-            <input
-              type="text" // Добавил type
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              className={glassInput}
-              placeholder="Новое имя пользователя"
-              required
-              disabled={isLoading} // Блокируем во время начальной загрузки
-            />
-          </label>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className="relative">
+            <label className={styles.label}>
+              <User size={12} /> Username в системе
+            </label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><User size={18} /></div>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                className={styles.input}
+                placeholder="Введите новый логин"
+                required
+              />
+            </div>
+          </div>
 
-          <button
-            type="submit"
-            disabled={saving || isLoading || username.trim() === initialUsername || !username.trim()} // Кнопка неактивна, если нет изменений или пусто
-            className={`${btnBase} ${btnSave}`}
-          >
-            {saving ? 'Сохраняем…' : 'Сохранить'}
-          </button>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={saving || isUnchanged}
+              className={styles.btnSave}
+            >
+              {saving ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : isUnchanged ? (
+                "Нет изменений"
+              ) : (
+                <><Check size={18} /> Сохранить изменения</>
+              )}
+            </button>
+          </div>
         </form>
+
+        <button 
+          onClick={() => router.back()} 
+          className={styles.btnBack}
+          disabled={saving}
+        >
+          <ChevronLeft size={14} strokeWidth={3} />
+          Отмена
+        </button>
+
+        {/* Фоновый декоративный элемент */}
+        <div className="absolute -bottom-12 -right-12 text-slate-50 opacity-50 pointer-events-none">
+          <RefreshCw size={120} />
+        </div>
       </motion.div>
     </div>
   );

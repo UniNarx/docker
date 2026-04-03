@@ -1,165 +1,235 @@
-// src/app/dashboard/doctors/appointments/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Calendar, 
+  User, 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  AlertCircle,
+  Loader2,
+  ChevronRight
+} from 'lucide-react';
 import {
     getTokenFromStorage,
     getDecodedToken,
-    DecodedJwtPayload,
     ROLE_NAMES
 } from '@/lib/authUtils';
 
-// Обновленные типы
-type PatientInfoForAppointment = { // Информация о пациенте, приходящая с записью
+// --- Types ---
+type PatientInfo = {
   _id: string;
-  id?: string;
   firstName: string;
   lastName: string;
 };
 
 type AppointmentData = {
   _id: string;
-  id?: string;
-  doctorId: string;
-  patientId: string; // Остается ID, но теперь также есть объект patient
-  patient: PatientInfoForAppointment; // <--- ПОПУЛИРОВАННЫЕ ДАННЫЕ ПАЦИЕНТА
+  patient: PatientInfo;
   apptTime: string;
-  status: string;
+  status: 'scheduled' | 'cancelled' | 'completed' | string;
 };
 
-// PatientData и DoctorData больше не нужны здесь, если вся инфо приходит с AppointmentData
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] p-6 md:p-12 font-sans",
+  container: "max-w-5xl mx-auto",
+  header: "flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4",
+  title: "text-4xl font-black text-[#1e3a8a] uppercase tracking-tighter",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mt-1",
+  
+  // Table / List Styles
+  card: "bg-white rounded-[40px] shadow-2xl shadow-blue-900/5 border-4 border-white overflow-hidden",
+  table: "w-full text-left border-collapse",
+  th: "px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50",
+  tr: "group hover:bg-slate-50/50 transition-colors",
+  td: "px-8 py-6 border-b border-slate-50",
+  
+  // Status Badges
+  badge: "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest inline-flex items-center gap-2",
+  statusScheduled: "bg-blue-50 text-blue-600",
+  statusCompleted: "bg-emerald-50 text-emerald-600",
+  statusCancelled: "bg-red-50 text-red-600",
+
+  // Action Buttons
+  btnAction: "p-2 rounded-xl transition-all active:scale-90 flex items-center justify-center",
+  btnComplete: "bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/20",
+  btnCancel: "bg-white border-2 border-slate-100 text-slate-400 hover:text-red-500 hover:border-red-100",
+};
 
 export default function DoctorAppointmentsPage() {
   const [appointments, setAppointments] = useState<AppointmentData[] | null>(null);
-  // patientsMap больше не нужен, если данные пациента приходят с каждой записью
-  // const [patientsMap, setPatientsMap]   = useState<Record<string, string>>({});
-  const [error, setError]               = useState<string | null>(null);
-  const [isLoading, setIsLoading]       = useState(true);
-
-  /* — common styles (остаются без изменений) — */
-  const glassCard   = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const headerText  = "text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400";
-  const rowHover    = "hover:bg-white/5 transition-colors";
-  const btnCancel   = "px-3 py-1 rounded-lg font-medium transition bg-gradient-to-r from-red-500 to-pink-500 hover:from-pink-500 hover:to-red-500 text-white disabled:opacity-50";
-  const btnComplete = "px-3 py-1 rounded-lg font-medium transition bg-gradient-to-r from-green-400 to-teal-400 hover:from-teal-400 hover:to-green-400 text-white disabled:opacity-50";
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
     const token = getTokenFromStorage();
-    if (!token) {
-      setError('Не авторизованы');
+    const decodedToken = token ? getDecodedToken(token) : null;
+
+    if (!token || decodedToken?.roleName !== ROLE_NAMES.DOCTOR) {
+      setError('Доступ ограничен');
       setIsLoading(false);
       return;
     }
 
-    const decodedToken = getDecodedToken(token);
-    if (!decodedToken || decodedToken.roleName !== ROLE_NAMES.DOCTOR) {
-      setError('Доступ только для врачей');
-      setIsLoading(false);
-      return;
-    }
-
-    // Врач запрашивает СВОИ записи через /api/appointments/doctor/me
-    // Бэкенд теперь должен популировать информацию о пациенте
     apiFetch<AppointmentData[]>('/appointments/doctor/me')
-      .then(myAppointments => {
-        setAppointments(myAppointments || []);
-      })
-      .catch(e => {
-        console.error("Ошибка загрузки записей врача:", e);
-        setError(e.message || "Произошла ошибка");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      .then(data => setAppointments(data || []))
+      .catch(e => setError(e.message))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const updateAppointmentStatus = async (appointmentId: string, newStatus: 'cancelled' | 'completed') => {
-    if (!confirm(newStatus === 'cancelled' ? 'Отменить приём?' : 'Отметить как завершённый?')) return;
-
-    const originalAppointments = appointments ? [...appointments] : [];
-
-    setAppointments(prev => prev?.map(a =>
-      (a._id || a.id) === appointmentId ? { ...a, status: newStatus, patient: a.patient } : a // Убедимся что patient не теряется
-    ) || null);
+  const handleStatusUpdate = async (id: string, newStatus: 'cancelled' | 'completed') => {
+    const confirmMsg = newStatus === 'cancelled' ? 'Отменить запись?' : 'Приём завершен?';
+    if (!confirm(confirmMsg)) return;
 
     try {
-      await apiFetch(`/appointments/${appointmentId}/status`, {
+      await apiFetch(`/appointments/${id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       });
+      setAppointments(prev => prev?.map(a => a._id === id ? { ...a, status: newStatus } : a) || null);
     } catch (e: any) {
-      console.error(`Ошибка при обновлении статуса приёма ${appointmentId} на ${newStatus}:`, e);
-      alert('Ошибка при обновлении статуса: ' + e.message);
-      setAppointments(originalAppointments);
+      alert('Ошибка: ' + e.message);
     }
   };
 
-  if (isLoading) return <p className="p-6 text-center text-gray-300">Загрузка ваших приёмов...</p>;
-  if (error) return <p className="p-6 text-center text-red-400">{error}</p>;
-  if (!appointments || appointments.length === 0) return <p className="p-6 text-center text-gray-300">У вас нет запланированных приёмов.</p>;
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <Loader2 className="w-10 h-10 text-[#1e3a8a] animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 p-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-4xl mx-auto ${glassCard} p-6 text-white`}
-      >
-        <h1 className={`text-3xl font-bold mb-6 ${headerText}`}>
-          Мои приёмы
-        </h1>
+    <div className={styles.layout}>
+      <div className={styles.container}>
+        
+        <header className={styles.header}>
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }} 
+            animate={{ opacity: 1, x: 0 }}
+          >
+            <h1 className={styles.title}>Приёмы</h1>
+            <span className={styles.subtitle}>Расписание консультаций на сегодня</span>
+          </motion.div>
+          
+          <div className="flex items-center gap-3 bg-white p-2 px-4 rounded-2xl shadow-sm border border-slate-100">
+            <Calendar className="text-blue-500" size={18} />
+            <span className="text-sm font-bold text-[#1e3a8a]">
+              {new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+            </span>
+          </div>
+        </header>
 
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto border-separate bg-white/10 rounded-lg">
-            <thead>
-              <tr className="text-left text-gray-300">
-                {['Дата / время', 'Пациент', 'Статус', 'Действия'].map(th => (
-                  <th key={th} className="px-4 py-2">{th}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {appointments.map(appt => {
-                const appointmentDate = new Date(appt.apptTime);
-                const appointmentId = appt._id || appt.id;
-                const patientName = appt.patient ? `${appt.patient.firstName} ${appt.patient.lastName}` : `#${appt.patientId}`;
-
-                return (
-                  <tr key={appointmentId} className={`border-t border-white/20 ${rowHover}`}>
-                    <td className="px-4 py-3">
-                      {appointmentDate.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}
-                    </td>
-                    <td className="px-4 py-3">{patientName}</td>
-                    <td className="px-4 py-3 capitalize">{appt.status}</td>
-                    <td className="px-4 py-3 space-x-2">
-                      {appt.status === 'scheduled' && appointmentId && (
-                        <>
-                          <button
-                            onClick={() => updateAppointmentStatus(appointmentId, 'cancelled')}
-                            className={btnCancel}
-                          >
-                            Отменить
-                          </button>
-                          <button
-                            onClick={() => updateAppointmentStatus(appointmentId, 'completed')}
-                            className={btnComplete}
-                          >
-                            Завершить
-                          </button>
-                        </>
-                      )}
-                    </td>
+        {error ? (
+          <div className="bg-red-50 border-2 border-red-100 p-6 rounded-[30px] flex items-center gap-4 text-red-500 font-bold">
+            <AlertCircle /> {error}
+          </div>
+        ) : (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={styles.card}
+          >
+            <div className="overflow-x-auto">
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th className={styles.th}>Время</th>
+                    <th className={styles.th}>Пациент</th>
+                    <th className={styles.th}>Статус</th>
+                    <th className={`${styles.th} text-right`}>Действия</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
+                </thead>
+                <tbody>
+                  <AnimatePresence>
+                    {appointments?.map((appt) => (
+                      <motion.tr 
+                        key={appt._id} 
+                        layout
+                        className={styles.tr}
+                      >
+                        {/* Время */}
+                        <td className={styles.td}>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                              <Clock size={18} />
+                            </div>
+                            <span className="text-sm font-black text-[#1e3a8a]">
+                              {new Date(appt.apptTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Пациент */}
+                        <td className={styles.td}>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-[#1e3a8a]">
+                              {appt.patient.firstName} {appt.patient.lastName}
+                            </span>
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Пациент клиники</span>
+                          </div>
+                        </td>
+
+                        {/* Статус */}
+                        <td className={styles.td}>
+                          <span className={`
+                            ${styles.badge} 
+                            ${appt.status === 'scheduled' ? styles.statusScheduled : 
+                              appt.status === 'completed' ? styles.statusCompleted : styles.statusCancelled}
+                          `}>
+                            <div className={`w-1.5 h-1.5 rounded-full bg-current`} />
+                            {appt.status === 'scheduled' ? 'Ожидается' : 
+                             appt.status === 'completed' ? 'Завершен' : 'Отменен'}
+                          </span>
+                        </td>
+
+                        {/* Действия */}
+                        <td className={`${styles.td} text-right`}>
+                          <div className="flex items-center justify-end gap-2">
+                            {appt.status === 'scheduled' ? (
+                              <>
+                                <button 
+                                  onClick={() => handleStatusUpdate(appt._id, 'cancelled')}
+                                  className={`${styles.btnAction} ${styles.btnCancel}`}
+                                  title="Отменить"
+                                >
+                                  <XCircle size={20} />
+                                </button>
+                                <button 
+                                  onClick={() => handleStatusUpdate(appt._id, 'completed')}
+                                  className={`${styles.btnAction} ${styles.btnComplete}`}
+                                >
+                                  <CheckCircle2 size={18} className="mr-2" />
+                                  <span className="text-[9px] font-black uppercase tracking-widest">Завершить</span>
+                                </button>
+                              </>
+                            ) : (
+                              <div className="text-slate-300">
+                                <ChevronRight size={20} />
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+            
+            {appointments?.length === 0 && (
+              <div className="p-20 text-center">
+                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
+                  <Calendar size={40} />
+                </div>
+                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">На сегодня приёмов нет</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 }

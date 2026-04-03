@@ -1,148 +1,185 @@
-// src/app/dashboard/doctors/patients/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/api'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  Users, 
+  Search, 
+  UserCircle, 
+  Calendar, 
+  ChevronRight, 
+  Loader2,
+  FileText,
+  Shield
+} from 'lucide-react'
 import {
     getTokenFromStorage,
     getDecodedToken,
     ROLE_NAMES
-} from '@/lib/authUtils'; // Предполагаем наличие этих утилит
+} from '@/lib/authUtils';
 
-// Тип для данных пациента, ожидаемых от API
+// --- Types ---
 type PatientData = {
-  _id: string; // MongoDB ID
-  id?: string;  // Mongoose virtual ID
-  firstName: string; // было first_name
-  lastName: string;  // было last_name
-  dateOfBirth: string; // было date_of_birth (ожидаем строку даты)
-  // user, createdAt и другие поля, если они нужны/приходят от API
+  _id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
 };
 
-// Тип для данных "я" (врача) от /doctors/me
-type DoctorMeData = {
-  _id: string; // MongoDB ID профиля врача
-  id?: string;  // Mongoose virtual ID
-  userId: string; // ID пользователя, связанного с этим профилем врача
-  // firstName, lastName, specialty и другие поля, если они нужны/приходят от API
+type DoctorMeData = { _id: string; };
+
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] p-6 md:p-12 font-sans",
+  container: "max-w-5xl mx-auto",
+  
+  // Header
+  header: "flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6",
+  title: "text-4xl font-black text-[#1e3a8a] uppercase tracking-tighter",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mt-1",
+  
+  // Search Bar
+  searchWrapper: "relative group w-full md:w-72",
+  searchInput: "w-full bg-white border-2 border-slate-100 rounded-[20px] py-3 pl-12 pr-4 text-sm font-bold text-[#1e3a8a] outline-none focus:border-indigo-500/20 shadow-sm transition-all",
+  searchIcon: "absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors",
+
+  // Grid/List
+  grid: "grid grid-cols-1 gap-4",
+  patientCard: "bg-white rounded-[30px] border-4 border-white shadow-xl shadow-indigo-900/5 p-6 flex items-center justify-between group hover:scale-[1.01] transition-all duration-300",
+  
+  avatar: "w-14 h-14 bg-indigo-50 rounded-[22px] flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300",
+  info: "flex-1 ml-6",
+  name: "text-lg font-black text-[#1e3a8a] leading-none mb-1",
+  meta: "flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest",
+  
+  btnView: "bg-slate-50 text-slate-400 p-4 rounded-[20px] group-hover:bg-[#1e3a8a] group-hover:text-white transition-all duration-300 shadow-inner",
+  emptyState: "text-center py-24 bg-white rounded-[45px] border-4 border-white shadow-xl shadow-indigo-900/5"
 };
 
 export default function DoctorPatientsPage() {
   const [patients, setPatients] = useState<PatientData[] | null>(null);
-  const [error, setError]       = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  /* — glass & dark styles — */
-  const glassCard   = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const headerBg    = "bg-gradient-to-r from-indigo-500 to-purple-500 text-white"; // Для заголовка таблицы
-  const rowHover    = "hover:bg-white/5 transition-colors";
-  const btnView     = "px-3 py-1 rounded-lg font-medium transition bg-gradient-to-r from-indigo-400 to-purple-400 text-white hover:from-purple-400 hover:to-indigo-400";
 
   useEffect(() => {
     setIsLoading(true);
     const token = getTokenFromStorage();
-    if (!token) {
-      setError('Не авторизованы');
+    const decodedToken = token ? getDecodedToken(token) : null;
+
+    if (!token || decodedToken?.roleName !== ROLE_NAMES.DOCTOR) {
+      setError('Доступ только для медицинского персонала');
       setIsLoading(false);
       return;
     }
 
-    const decodedToken = getDecodedToken(token); // Получаем декодированный токен
-    // Проверяем роль по имени роли
-    if (!decodedToken || decodedToken.roleName !== ROLE_NAMES.DOCTOR) {
-      setError('Доступ только для врачей');
-      setIsLoading(false);
-      return;
-    }
-
-    // Сначала получаем профиль текущего врача (/doctors/me), чтобы узнать его ID профиля врача
     apiFetch<DoctorMeData>('/doctors/me')
-      .then(doctorProfile => {
-        if (!doctorProfile || !(doctorProfile._id || doctorProfile.id)) {
-          throw new Error('Не удалось получить профиль врача.');
-        }
-        const currentDoctorProfileId = doctorProfile._id || doctorProfile.id;
-        // Затем запрашиваем пациентов этого врача
-        return apiFetch<PatientData[]>(`/doctors/${currentDoctorProfileId}/patients`);
-      })
-      .then(patientList => {
-        setPatients(patientList || []); // Устанавливаем пустой массив, если null
-      })
-      .catch(e => {
-        console.error("Ошибка загрузки пациентов врача:", e);
-        setError(e.message || "Произошла ошибка при загрузке данных.");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      .then(profile => apiFetch<PatientData[]>(`/doctors/${profile._id}/patients`))
+      .then(data => setPatients(data || []))
+      .catch(e => setError(e.message))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  if (isLoading) return <p className="p-6 text-center text-gray-300">Загрузка списка пациентов...</p>;
-  if (error) return <p className="p-6 text-center text-red-400">{error}</p>;
-  // Условие "!patients.length" уже обрабатывается ниже, если patients не null
+  const filteredPatients = patients?.filter(p => 
+    `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 p-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-4xl mx-auto ${glassCard} p-6 text-white`}
-      >
-        <h1 className="text-3xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
-          Мои пациенты
-        </h1>
+  const calculateAge = (dob: string) => {
+    const ageDifMs = Date.now() - new Date(dob).getTime();
+    const ageDate = new Date(ageDifMs);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
+  };
 
-        {patients === null || patients.length === 0 && !isLoading && ( // Показываем если null или пустой массив и не загрузка
-            <p className="p-6 text-center text-gray-300">У вас нет пациентов.</p>
-        )}
-
-        {patients && patients.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto border-separate bg-white/10 rounded-lg">
-              <thead>
-                <tr className={`${headerBg}`}>
-                  {['ID', 'Имя', 'Фамилия', 'Дата рождения', 'Действие'].map(col => (
-                    <th key={col} className="px-4 py-2 font-medium text-left">{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {patients.map((patient, i) => {
-                  const patientId = patient._id || patient.id; // ID пациента для ключа и ссылки
-                  return (
-                    <motion.tr
-                      key={patientId}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.05 }}
-                      className={`border-t border-white/20 ${rowHover}`}
-                    >
-                      <td className="px-4 py-3 text-gray-200 truncate max-w-[100px]">{patientId}</td>
-                      <td className="px-4 py-3 text-gray-200">{patient.firstName}</td> {/* было first_name */}
-                      <td className="px-4 py-3 text-gray-200">{patient.lastName}</td>  {/* было last_name */}
-                      <td className="px-4 py-3 text-gray-200">
-                        {new Date(patient.dateOfBirth).toLocaleDateString('ru-RU')} {/* было date_of_birth */}
-                      </td>
-                      <td className="px-4 py-3">
-                        {patientId && (
-                          <Link href={`/dashboard/doctors/patients/${patientId}`}>
-                            <button className={btnView}>
-                              Смотреть
-                            </button>
-                          </Link>
-                        )}
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </motion.div>
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <Loader2 className="w-10 h-10 text-[#1e3a8a] animate-spin" />
     </div>
   );
+
+  return (
+    <div className={styles.layout}>
+      <div className={styles.container}>
+        
+        <header className={styles.header}>
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+            <h1 className={styles.title}>Пациенты</h1>
+            <span className={styles.subtitle}>Ваша персональная база данных</span>
+          </motion.div>
+
+          <div className={styles.searchWrapper}>
+            <Search className={styles.searchIcon} size={18} />
+            <input 
+              type="text" 
+              placeholder="Поиск по имени..." 
+              className={styles.searchInput}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </header>
+
+        {error ? (
+          <div className="bg-red-50 border-2 border-red-100 p-6 rounded-[30px] flex items-center gap-4 text-red-500 font-black uppercase text-[10px] tracking-widest">
+            <Shield size={20} /> {error}
+          </div>
+        ) : (
+          <div className={styles.grid}>
+            <AnimatePresence mode="popLayout">
+              {filteredPatients && filteredPatients.length > 0 ? (
+                filteredPatients.map((patient, i) => (
+                  <motion.div
+                    key={patient._id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    layout
+                  >
+                    <Link href={`/dashboard/doctors/patients/${patient._id}`} className={styles.patientCard}>
+                      <div className={styles.avatar}>
+                        <UserCircle size={28} />
+                      </div>
+                      
+                      <div className={styles.info}>
+                        <h2 className={styles.name}>{patient.firstName} {patient.lastName}</h2>
+                        <div className={styles.meta}>
+                          <span className="flex items-center gap-1.5">
+                            <Calendar size={12} /> {new Date(patient.dateOfBirth).toLocaleDateString('ru-RU')}
+                          </span>
+                          <span className="bg-indigo-50 text-indigo-400 px-2 py-0.5 rounded-md">
+                            {calculateAge(patient.dateOfBirth)} лет
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={styles.btnView}>
+                        <ChevronRight size={24} strokeWidth={3} />
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))
+              ) : (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={styles.emptyState}>
+                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200">
+                    <Users size={40} />
+                  </div>
+                  <h3 className="text-[#1e3a8a] font-black uppercase tracking-tighter text-xl">Пациенты не найдены</h3>
+                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-2">Попробуйте изменить параметры поиска</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        <footer className="mt-12 flex items-center justify-between px-6">
+           <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
+             <Shield size={14} /> Защищенное соединение SSL
+           </div>
+           <div className="text-[10px] font-black text-indigo-200 uppercase tracking-widest">
+             Всего: {filteredPatients?.length || 0}
+           </div>
+        </footer>
+      </div>
+    </div>
+  )
 }

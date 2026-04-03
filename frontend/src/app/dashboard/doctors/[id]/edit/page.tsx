@@ -1,4 +1,3 @@
-// frontend/src/app/dashboard/doctors/[id]/edit/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -6,19 +5,60 @@ import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import { apiFetch } from '@/lib/api';
 import { motion } from 'framer-motion';
-import { UploadButton } from '@uploadthing/react'; // Ensure this line is present
-import { UploadCloud } from 'lucide-react';
-import type { OurFileRouter } from '@/app/api/uploadthing/core'; // Ensure this path is correct
+import { UploadButton } from '@uploadthing/react';
+import { 
+  UploadCloud, 
+  User, 
+  Stethoscope, 
+  FileText, 
+  ChevronLeft, 
+  Save, 
+  Loader2, 
+  Camera,
+  AlertCircle
+} from 'lucide-react';
+import type { OurFileRouter } from '@/app/api/uploadthing/core';
 
-// TypeScript type for DoctorData
+// --- Types ---
 type DoctorData = {
   _id: string;
-  id?: string;
   firstName: string;
   lastName: string;
   specialty: string;
   avatarUrl?: string;
   description?: string;
+};
+
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans",
+  card: "max-w-2xl w-full bg-white rounded-[45px] shadow-2xl shadow-indigo-900/5 border-4 border-white p-8 md:p-12 relative overflow-hidden",
+  
+  header: "mb-10 text-center",
+  title: "text-3xl font-black text-[#1e3a8a] uppercase tracking-tighter leading-none mb-2",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]",
+  
+  // Avatar Section
+  avatarContainer: "flex flex-col items-center mb-10 pb-8 border-b border-slate-50",
+  avatarWrapper: "relative w-32 h-32 mb-6 group",
+  avatarImage: "rounded-[35px] object-cover border-4 border-white shadow-xl group-hover:scale-105 transition-transform duration-500",
+  avatarPlaceholder: "w-full h-full rounded-[35px] bg-slate-50 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-200",
+  
+  // Form elements
+  form: "space-y-6",
+  grid: "grid grid-cols-1 md:grid-cols-2 gap-6",
+  fieldGroup: "relative",
+  label: "flex items-center gap-2 text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-3 ml-1",
+  
+  inputContainer: "relative group",
+  iconWrapper: "absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-600 transition-colors",
+  input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-6 text-sm font-bold text-[#1e3a8a] outline-none focus:border-indigo-500/20 focus:bg-white transition-all placeholder:text-slate-300",
+  textarea: "w-full bg-slate-50 border-2 border-slate-100 rounded-[25px] py-4 pl-14 pr-6 text-sm font-bold text-[#1e3a8a] outline-none focus:border-indigo-500/20 focus:bg-white transition-all min-h-[160px] resize-none",
+  
+  // Buttons
+  btnSave: "w-full bg-[#1e3a8a] text-white rounded-[24px] py-5 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-indigo-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50",
+  btnBack: "flex items-center justify-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-[#1e3a8a] transition-colors mt-8 w-full",
+  
+  errorBox: "bg-red-50 border-2 border-red-100 p-4 rounded-[22px] flex items-center gap-3 text-red-500 text-[10px] font-black uppercase tracking-tight mb-8"
 };
 
 export default function DoctorEditPage() {
@@ -36,22 +76,13 @@ export default function DoctorEditPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  const glassCard  = 'bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg';
-  const glassInput = 'w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400';
-  const btnBase    = 'w-full py-2 rounded-lg font-medium transition-colors';
-  const btnSave    = 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50';
-  const errorBox   = 'text-red-400 bg-red-900/30 border border-red-600 rounded-lg px-4 py-2';
-
   useEffect(() => {
     if (!doctorIdFromUrl) {
-      setError('ID врача не найден в URL.');
+      setError('ID врача не найден');
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    setError(null);
-
-    // Fetch a single doctor by ID
     apiFetch<DoctorData>(`/doctors/${doctorIdFromUrl}`)
       .then(doctor => {
         if (doctor) {
@@ -60,38 +91,24 @@ export default function DoctorEditPage() {
           setSpecialty(doctor.specialty);
           setDescription(doctor.description || '');
           setCurrentAvatarUrl(doctor.avatarUrl || null);
-        } else {
-          throw new Error(`Врач с ID ${doctorIdFromUrl} не найден.`);
         }
       })
-      .catch(err => {
-        console.error(`Ошибка загрузки данных врача с ID ${doctorIdFromUrl}:`, err);
-        setError(err.message || 'Не удалось загрузить данные врача.');
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      .catch(err => setError(err.message))
+      .finally(() => setIsLoading(false));
   }, [doctorIdFromUrl]);
 
-  const handleProfileDataSubmit = async (e: React.FormEvent) => {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim() || !lastName.trim() || !specialty.trim()) {
-      setError('Имя, фамилия и специализация обязательны.');
-      return;
-    }
     setIsSaving(true);
     setError(null);
-
     try {
-      // API call to update doctor's profile data
-      await apiFetch<void>(`/doctors/${doctorIdFromUrl}`, {
+      await apiFetch(`/doctors/${doctorIdFromUrl}`, {
         method: 'PUT',
         body: JSON.stringify({ firstName, lastName, specialty, description: description.trim() }),
       });
-      alert('Данные профиля врача успешно обновлены!');
+      alert('Данные успешно обновлены!');
     } catch (err: any) {
-      console.error('Ошибка сохранения данных врача:', err);
-      setError(err.message || 'Не удалось сохранить изменения.');
+      setError(err.message);
     } finally {
       setIsSaving(false);
     }
@@ -99,182 +116,164 @@ export default function DoctorEditPage() {
 
   const handleAvatarUploadComplete = async (res?: any[]) => {
     setIsUploading(false);
-    if (!res || res.length === 0) {
-      setError('Загрузка не вернула ни одного файла.');
-      return;
-    }
-    // Assuming the response structure from UploadThing contains fileUrl or url
-    const newAvatarUrl = res[0].fileUrl || res[0].url;
-    if (!newAvatarUrl) {
-      setError('Ответ от UploadThing не содержит URL файла.');
-      return;
-    }
+    const newAvatarUrl = res?.[0].fileUrl || res?.[0].url;
+    if (!newAvatarUrl) return;
+
     try {
-      // API call to update doctor's avatar URL
       const updateResponse = await apiFetch<{ avatarUrl: string }>(
         `/doctors/${doctorIdFromUrl}/avatar`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({ avatarUrl: newAvatarUrl }),
-        }
+        { method: 'PUT', body: JSON.stringify({ avatarUrl: newAvatarUrl }) }
       );
       setCurrentAvatarUrl(updateResponse.avatarUrl);
-      alert('Аватар врача успешно обновлен!');
-    } catch (uploadError: any) {
-      console.error('Ошибка при сохранении аватара:', uploadError);
-      setError(uploadError.message || 'Не удалось сохранить аватар.');
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
-  const handleUploadError = (err: Error) => {
-    setIsUploading(false);
-    setError(`Ошибка загрузки файла: ${err.message}`);
-  };
-
-  // Conditional rendering for loading and error states
-  if (isLoading) {
-    return <p className="p-6 text-center text-gray-300">Загрузка данных врача...</p>;
-  }
-  if (error && !firstName && !doctorIdFromUrl) { // Major error, no data to show
-    return <p className="p-6 text-center text-red-400">Ошибка: {error}</p>;
-  }
-   if (!isLoading && !error && !doctorIdFromUrl) { // Doctor ID itself is missing from URL params
-    return <p className="p-6 text-center text-gray-300">Не указан ID врача.</p>;
-  }
-  // If doctorId is present but data (firstName, lastName) failed to load
-  if (!isLoading && !error && doctorIdFromUrl && !firstName && !lastName) {
-      return (
-        <div className="p-6 text-center">
-          <p className="text-red-400">Не удалось загрузить данные для врача с ID: {doctorIdFromUrl}.</p>
-          {error && <p className="text-red-400">Детали ошибки: {error}</p>}
-          <button onClick={() => router.back()} className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded">Назад</button>
-        </div>
-      );
-  }
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center p-4 !-mt-20">
-      <motion.div
+    <div className={styles.layout}>
+      <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-lg w-full ${glassCard} p-6 space-y-6 text-white`}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 text-center">
-          Редактировать врача (ID: {doctorIdFromUrl ? doctorIdFromUrl.slice(-6) : 'N/A'})
-        </h1>
+        <header className={styles.header}>
+          <h1 className={styles.title}>Профиль врача</h1>
+          <p className={styles.subtitle}>Редактирование публичной информации</p>
+        </header>
 
-        {error && <div className={errorBox}>{error}</div>}
+        {error && (
+          <div className={styles.errorBox}>
+            <AlertCircle size={18} /> <span>{error}</span>
+          </div>
+        )}
 
-        {/* Avatar display and UploadThing button */}
-        <div className="flex flex-col items-center space-y-3 border-b border-white/10 pb-6 mb-6">
-          <span className="font-medium">Аватар</span>
-          {currentAvatarUrl ? (
-            <Image
-              src={currentAvatarUrl}
-              alt="Аватар врача"
-              width={100}
-              height={100}
-              className="rounded-full object-cover w-24 h-24 border-2 border-indigo-300"
-              priority // Consider for LCP
-            />
-          ) : (
-            <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center text-gray-400 text-xs">
-              Нет аватара
-            </div>
-          )}
-          {/* Corrected UploadButton with two generic arguments */}
+        {/* --- Avatar Section --- */}
+        <div className={styles.avatarContainer}>
+          <div className={styles.avatarWrapper}>
+            {currentAvatarUrl ? (
+              <Image
+                src={currentAvatarUrl}
+                alt="Doctor Avatar"
+                fill
+                className={styles.avatarImage}
+              />
+            ) : (
+              <div className={styles.avatarPlaceholder}>
+                <Camera size={32} />
+                <span className="text-[8px] font-black uppercase mt-2">Нет фото</span>
+              </div>
+            )}
+          </div>
+
           <UploadButton<OurFileRouter, "avatarUploader">
-            endpoint="avatarUploader" // This must match a key in your OurFileRouter
+            endpoint="avatarUploader"
             onClientUploadComplete={handleAvatarUploadComplete}
-            onUploadError={handleUploadError}
+            onUploadError={(err) => { setIsUploading(false); setError(err.message); }}
             onUploadBegin={() => { setIsUploading(true); setError(null); }}
-            className="ut-button:bg-indigo-500 ut-button:ut-readying:bg-indigo-500/50 ut-label:text-white ut-allowed-content:text-gray-300" // Example styling
+            appearance={{
+              button: "ut-ready:bg-indigo-600 ut-uploading:cursor-not-allowed bg-indigo-500 text-[10px] font-black uppercase tracking-widest px-6 py-3 rounded-full transition-all hover:scale-105",
+              allowedContent: "hidden"
+            }}
             content={{
-                button({ ready, isUploading: uploading }) {
-                  if (ready && !uploading) return <><UploadCloud className="w-5 h-5 mr-2" /> <span>Изменить аватар</span></>;
-                  if (uploading) return "Загрузка...";
-                  return "Подготовка...";
-                },
-                allowedContent({ ready, fileTypes, isUploading: uploading }) {
-                  if (!ready || uploading) return null;
-                  return <span className="text-xs text-gray-400 mt-1">Макс. 2MB ({fileTypes.join(", ")})</span>;
-                },
+              button({ ready, isUploading: uploading }) {
+                if (uploading) return "Загрузка...";
+                if (ready) return "Изменить аватар";
+                return "Подготовка...";
+              }
             }}
           />
-          {isUploading && <p className="text-sm text-gray-400 mt-1">Идет загрузка...</p>}
+          {isUploading && <p className="text-[9px] font-black text-indigo-400 uppercase mt-3 animate-pulse">Передача данных...</p>}
         </div>
 
-        {/* Form for doctor's profile data */}
-        <form onSubmit={handleProfileDataSubmit} className="space-y-4">
-          <h2 className="text-xl font-semibold text-center text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300 mb-4">
-            Основные данные
-          </h2>
-          {/* Input for First Name */}
-          <label className="block space-y-1">
-            <span className="font-medium">Имя</span>
-            <input
-              type="text"
-              value={firstName}
-              onChange={e => setFirstName(e.target.value)}
-              className={glassInput}
-              required
-              disabled={isSaving || isLoading}
-            />
-          </label>
-          {/* Input for Last Name */}
-          <label className="block space-y-1">
-            <span className="font-medium">Фамилия</span>
-            <input
-              type="text"
-              value={lastName}
-              onChange={e => setLastName(e.target.value)}
-              className={glassInput}
-              required
-              disabled={isSaving || isLoading}
-            />
-          </label>
-          {/* Input for Specialty */}
-          <label className="block space-y-1">
-            <span className="font-medium">Специализация</span>
-            <input
-              type="text"
-              value={specialty}
-              onChange={e => setSpecialty(e.target.value)}
-              className={glassInput}
-              required
-              disabled={isSaving || isLoading}
-            />
-          </label>
-          {/* Textarea for Description */}
-           <label className="block space-y-1">
-            <span className="font-medium">Описание врача</span>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              className={`${glassInput} h-40 resize-y`}
-              placeholder="Расскажите о враче, его опыте, подходе к лечению и т.д."
-              disabled={isLoading || isSaving}
-            />
-          </label>
+        {/* --- Form Section --- */}
+        <form onSubmit={handleProfileSubmit} className={styles.form}>
+          <div className={styles.grid}>
+            {/* First Name */}
+            <div className={styles.fieldGroup}>
+              <label className={styles.label}><User size={12} /> Имя</label>
+              <div className={styles.inputContainer}>
+                <div className={styles.iconWrapper}><User size={18} /></div>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={e => setFirstName(e.target.value)}
+                  className={styles.input}
+                  required
+                />
+              </div>
+            </div>
 
-          {/* Submit button for profile data */}
+            {/* Last Name */}
+            <div className={styles.fieldGroup}>
+              <label className={styles.label}><User size={12} /> Фамилия</label>
+              <div className={styles.inputContainer}>
+                <div className={styles.iconWrapper}><User size={18} /></div>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={e => setLastName(e.target.value)}
+                  className={styles.input}
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Specialty */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><Stethoscope size={12} /> Специализация</label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Stethoscope size={18} /></div>
+              <input
+                type="text"
+                value={specialty}
+                onChange={e => setSpecialty(e.target.value)}
+                className={styles.input}
+                required
+              />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><FileText size={12} /> Описание и опыт</label>
+            <div className={styles.inputContainer}>
+              <div className={`${styles.iconWrapper} top-8`}><FileText size={18} /></div>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className={styles.textarea}
+                placeholder="Расскажите о квалификации врача..."
+              />
+            </div>
+          </div>
+
           <button
             type="submit"
-            disabled={isSaving || isUploading || isLoading}
-            className={`${btnBase} ${btnSave}`}
+            disabled={isSaving || isUploading}
+            className={styles.btnSave}
           >
-            {isSaving ? 'Сохраняем…' : 'Сохранить изменения'}
+            {isSaving ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <><Save size={18} /> Сохранить изменения</>
+            )}
           </button>
         </form>
 
-        {/* Button to navigate back */}
-        <button
+        <button 
           onClick={() => router.push('/dashboard/doctors')}
-          className={`${btnBase} bg-gray-600 hover:bg-gray-700 text-white mt-2`}
-          disabled={isSaving || isUploading || isLoading}
+          className={styles.btnBack}
         >
-          Назад к списку врачей
+          <ChevronLeft size={14} strokeWidth={3} />
+          Назад к списку
         </button>
       </motion.div>
     </div>

@@ -1,28 +1,53 @@
-// src/app/dashboard/profile/create-admin/page.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 import { motion } from 'framer-motion'
+import { 
+  UserPlus, 
+  ShieldCheck, 
+  Lock, 
+  User, 
+  ChevronLeft, 
+  Loader2, 
+  AlertCircle,
+  CheckCircle2,
+  ShieldAlert
+} from 'lucide-react'
 
-// Тип для данных, отправляемых на сервер
+// --- Types ---
 type CreateAdminForm = {
   username: string;
   password: string;
-  role: 'Patient' | 'Doctor' | 'Admin' | 'SuperAdmin'; // Обновил возможные роли, если нужно
-                                                                // В вашем <select> только User, Administrator, SuperAdmin
-                                                                // Убедитесь, что значения в <select> совпадают с этим типом
-                                                                // и с тем, что ожидает бэкенд.
-                                                                // 'User' может быть некорректным, если ожидаются 'Patient' или 'Doctor'
+  role: 'Admin' | 'SuperAdmin';
 };
 
-// Тип для ответа API (если он что-то возвращает, кроме статуса)
 type CreateAdminResponse = {
-  id?: string; // или number, в зависимости от того, что возвращает ваш API
-  userId?: string; // или number
-  username?: string;
   message?: string;
+};
+
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans",
+  card: "max-w-md w-full bg-white rounded-[40px] shadow-2xl shadow-slate-900/10 border-4 border-white p-10 relative overflow-hidden",
+  
+  header: "mb-10 text-center",
+  iconCircle: "w-16 h-16 bg-slate-50 text-indigo-600 rounded-[22px] flex items-center justify-center mx-auto mb-6 border-2 border-white shadow-inner",
+  title: "text-2xl font-black text-[#1e3a8a] uppercase tracking-tighter leading-none mb-2",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]",
+  
+  form: "space-y-6",
+  fieldGroup: "relative",
+  label: "flex items-center gap-2 text-[10px] font-black text-[#1e3a8a] uppercase tracking-widest mb-3 ml-1",
+  
+  inputContainer: "relative group",
+  iconWrapper: "absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors",
+  input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-6 text-sm font-bold text-[#1e3a8a] outline-none focus:border-indigo-500/20 focus:bg-white transition-all",
+  
+  select: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-10 text-sm font-bold text-[#1e3a8a] outline-none appearance-none focus:border-indigo-500/20 focus:bg-white transition-all cursor-pointer",
+  
+  btnCreate: "w-full bg-[#1e3a8a] text-white rounded-[24px] py-5 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 mt-4",
+  btnBack: "flex items-center justify-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-indigo-600 transition-colors mt-8 w-full",
 };
 
 export default function CreateAdminPage() {
@@ -30,114 +55,138 @@ export default function CreateAdminPage() {
   const [form, setForm] = useState<CreateAdminForm>({
     username: '',
     password: '',
-    role: 'Admin', // Значение по умолчанию для <select>
+    role: 'Admin',
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Стили остаются без изменений
-  const glassCard   = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const glassInput  = "w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400";
-  const btnBase     = "w-full py-2 rounded-lg font-medium transition-colors";
-  const btnCreate   = "bg-gradient-to-r from-green-400 to-teal-400 text-white hover:from-teal-400 hover:to-green-400 disabled:opacity-50";
-  const errorBox    = "text-red-400 bg-red-900/30 border border-red-600 rounded-lg px-4 py-2";
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value as CreateAdminForm['role'] })); // Уточнил тип для role
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value as CreateAdminForm['role'] }));
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.username.trim() || !form.password.trim()) {
-        setError("Имя пользователя и пароль обязательны.");
-        return;
+    if (form.password.length < 6) {
+      setError("Пароль должен быть не менее 6 символов");
+      return;
     }
+    
     setSaving(true);
     setError(null);
     try {
-      // Используем тип CreateAdminResponse для apiFetch
       const response = await apiFetch<CreateAdminResponse>('/auth/register-admin', {
         method: 'POST',
         body: JSON.stringify(form),
       });
-      console.log("Admin creation response:", response); // Лог для отладки
-      alert(response?.message || 'Администратор успешно создан!');
-      router.push('/dashboard/profile'); // Или на страницу списка администраторов
+      alert(response?.message || 'Пользователь успешно создан');
+      router.push('/dashboard/profile');
     } catch (err: any) {
-      console.error("Ошибка создания администратора:", err);
-      setError(err.message || "Не удалось создать администратора.");
+      setError(err.message || "Ошибка при регистрации");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center p-4 !-mt-20">
+    <div className={styles.layout}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-md w-full ${glassCard} p-6 space-y-6 text-white`}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300">
-          Создать пользователя с ролью
-        </h1>
+        <header className={styles.header}>
+          <div className={styles.iconCircle}>
+            <UserPlus size={32} strokeWidth={2.5} />
+          </div>
+          <h1 className={styles.title}>Новый доступ</h1>
+          <p className={styles.subtitle}>Создание системного аккаунта</p>
+        </header>
 
-        {error && <div className={errorBox}>{error}</div>}
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-red-50 border-2 border-red-100 p-4 rounded-[22px] flex items-center gap-3 text-red-500 text-[10px] font-black uppercase mb-8"
+          >
+            <ShieldAlert size={18} /> {error}
+          </motion.div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block space-y-1">
-            <span className="font-medium">Username</span>
-            <input
-              name="username"
-              type="text" // Явно указываем тип
-              value={form.username}
-              onChange={handleChange}
-              className={glassInput}
-              placeholder="Логин нового пользователя"
-              required
-            />
-          </label>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          {/* Username */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><User size={12} /> Имя пользователя</label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><User size={18} /></div>
+              <input
+                name="username"
+                type="text"
+                value={form.username}
+                onChange={handleChange}
+                className={styles.input}
+                placeholder="admin_2024"
+                required
+              />
+            </div>
+          </div>
 
-          <label className="block space-y-1">
-            <span className="font-medium">Password</span>
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              className={glassInput}
-              placeholder="Пароль (мин. 6 символов)"
-              minLength={6} // Пример валидации
-              required
-            />
-          </label>
+          {/* Password */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><Lock size={12} /> Временный пароль</label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Lock size={18} /></div>
+              <input
+                name="password"
+                type="password"
+                value={form.password}
+                onChange={handleChange}
+                className={styles.input}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+          </div>
 
-          <label className="block space-y-1">
-            <span className="font-medium">Role</span>
-            <select
-              name="role"
-              value={form.role}
-              onChange={handleChange}
-              className={glassInput}
-            >
-              {/* Убедитесь, что эти значения соответствуют именам ролей в вашей БД
-                  и тому, что ожидает бэкенд ('Patient', 'Doctor', 'Administrator', 'SuperAdmin')
-                  Ваш бэкенд seedRoles создает именно эти 4 роли. */}
-             
-              <option value="Admin">Admin</option>
-              <option value="SuperAdmin">SuperAdmin</option>
-            </select>
-          </label>
+          {/* Role */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><ShieldCheck size={12} /> Уровень полномочий</label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><ShieldCheck size={18} /></div>
+              <select
+                name="role"
+                value={form.role}
+                onChange={handleChange}
+                className={styles.select}
+              >
+                <option value="Admin">Administrator</option>
+                <option value="SuperAdmin">Super Administrator</option>
+              </select>
+              <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
+                <ChevronLeft size={16} className="-rotate-90" />
+              </div>
+            </div>
+          </div>
 
           <button
             type="submit"
             disabled={saving}
-            className={`${btnBase} ${btnCreate}`}
+            className={styles.btnCreate}
           >
-            {saving ? 'Создаём…' : 'Создать пользователя'}
+            {saving ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <><CheckCircle2 size={18} /> Активировать доступ</>
+            )}
           </button>
         </form>
+
+        <button 
+          onClick={() => router.back()} 
+          className={styles.btnBack}
+        >
+          <ChevronLeft size={14} strokeWidth={3} />
+          Вернуться в профиль
+        </button>
       </motion.div>
     </div>
   );

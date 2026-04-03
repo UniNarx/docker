@@ -1,185 +1,201 @@
-// src/app/dashboard/doctors/patients/[id]/medical_records/create/page.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 import { motion } from 'framer-motion'
+import { 
+  FilePlus2, 
+  Calendar, 
+  AlignLeft, 
+  Paperclip, 
+  X, 
+  CheckCircle2, 
+  Loader2, 
+  ArrowLeft,
+  AlertCircle,
+  FileText
+} from 'lucide-react'
 
-// Тип для ответа API при создании медкарты (ожидаем _id или id)
+// --- Types ---
 type CreatedMedicalRecordResponse = {
   _id: string;
   id?: string;
   visitDate: string;
   notes?: string;
-  attachments?: string[];
-  patientId: string;
-  doctorId: string;
+};
+
+const styles = {
+  layout: "min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans",
+  card: "max-w-2xl w-full bg-white rounded-[40px] shadow-2xl shadow-emerald-900/5 border-4 border-white p-10 relative overflow-hidden",
+  
+  header: "mb-10 text-center",
+  title: "text-3xl font-black text-[#064e3b] uppercase tracking-tighter leading-none mb-2",
+  subtitle: "text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]",
+  
+  form: "space-y-8",
+  fieldGroup: "relative",
+  label: "flex items-center gap-2 text-[10px] font-black text-[#064e3b] uppercase tracking-widest mb-3 ml-1",
+  
+  inputContainer: "relative group",
+  iconWrapper: "absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors",
+  input: "w-full bg-slate-50 border-2 border-slate-100 rounded-[22px] py-4 pl-14 pr-6 text-sm font-bold text-[#064e3b] outline-none focus:border-emerald-500/20 focus:bg-white transition-all",
+  textarea: "w-full bg-slate-50 border-2 border-slate-100 rounded-[25px] py-5 pl-14 pr-6 text-sm font-bold text-[#064e3b] outline-none focus:border-emerald-500/20 focus:bg-white transition-all min-h-[200px] resize-none",
+  
+  // File Upload
+  fileZone: "border-2 border-dashed border-slate-100 rounded-[25px] p-6 bg-slate-50/50 flex flex-col items-center justify-center group hover:border-emerald-200 transition-colors cursor-pointer relative",
+  fileInput: "absolute inset-0 opacity-0 cursor-pointer",
+  
+  btnSave: "w-full bg-[#059669] text-white rounded-[24px] py-5 font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-emerald-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 mt-4",
+  btnBack: "flex items-center justify-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-emerald-600 transition-colors mt-8 w-full",
 };
 
 export default function CreateMedicalRecordPage() {
   const params = useParams();
-  // patientIdParam будет строкой (ID пациента из URL)
   const patientIdParam = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
 
-  const [visitDate, setVisitDate] = useState<string>(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10); // Формат YYYY-MM-DD
-  });
-  const [notes, setNotes]             = useState('');
-  const [files, setFiles]             = useState<FileList | null>(null); // Для загрузки файлов
-  const [error, setError]             = useState<string | null>(null);
-  const [submitting, setSubmitting]   = useState(false);
-
-  /* — стили «glass & dark» — */
-  const glassCard  = "bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-lg";
-  const glassInput = "w-full bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400";
-  const btnBase    = "w-full py-2 rounded-lg font-medium transition-colors";
-  const btnSave    = "bg-gradient-to-r from-green-400 to-teal-400 text-white hover:from-teal-400 hover:to-green-400 disabled:opacity-50";
-  const errorBox   = "text-red-400 bg-red-900/30 border border-red-600 rounded-lg px-4 py-2";
-
-
-  // src/app/dashboard/doctors/patients/[id]/medical_records/create/page.tsx
-// ... (остальной код компонента и типы)
+  const [visitDate, setVisitDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = useState('');
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!visitDate || !notes.trim()) {
-        setError("Дата визита и заметки обязательны.");
-        return;
-    }
-    if (!patientIdParam) {
-        setError("ID пациента не определен.");
-        return;
+    if (!visitDate || !notes.trim() || !patientIdParam) {
+      setError("Заполните обязательные поля");
+      return;
     }
 
     setSubmitting(true);
     setError(null);
 
     try {
-      const newRecord = await apiFetch<CreatedMedicalRecordResponse>(
-        '/medical-records',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            patientId: patientIdParam,
-            visitDate: visitDate,
-            notes,
-          }),
-        }
-      );
+      const newRecord = await apiFetch<CreatedMedicalRecordResponse>('/medical-records', {
+        method: 'POST',
+        body: JSON.stringify({ patientId: patientIdParam, visitDate, notes }),
+      });
 
       const recordId = newRecord._id || newRecord.id;
 
+      // Логика загрузки файлов (если выбраны)
       if (recordId && files && files.length > 0) {
         const formData = new FormData();
         Array.from(files).forEach(file => formData.append('files', file));
         
-        // Убедитесь, что apiBaseUrl правильно формируется и включает /api, если это нужно.
-        // В вашем предыдущем коде было:
-        // const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
-        // Если NEXT_PUBLIC_API_URL = 'http://localhost:8080', то apiBaseUrl будет 'http://localhost:8080/api'
-        // Тогда полный URL для вложений будет: 'http://localhost:8080/api/medical-records/${recordId}/attachments'
-        // Это соответствует вашей структуре, где /api добавляется в server/index.ts
-        
         const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080') + '/api';
         const token = localStorage.getItem('token');
 
-        const attachmentResponse = await fetch(
-          `${apiBaseUrl}/medical-records/${recordId}/attachments`, // Используем medical-records (с дефисом)
-          {
-            method: 'POST',
-            headers: {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: formData,
-          }
-        );
-
-        if (!attachmentResponse.ok) {
-          const attachErrorData = await attachmentResponse.text();
-          throw new Error(`Ошибка загрузки вложений: ${attachmentResponse.status} ${attachmentResponse.statusText} - ${attachErrorData}`);
-        }
-        console.log("Вложения успешно загружены.");
+        await fetch(`${apiBaseUrl}/medical-records/${recordId}/attachments`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
       }
 
       router.push(`/dashboard/doctors/patients/${patientIdParam}`);
     } catch (err: any) {
-      console.error("Ошибка создания медицинской записи:", err);
-      setError(err.message || "Не удалось создать медицинскую запись.");
+      setError(err.message || "Ошибка сохранения");
     } finally {
       setSubmitting(false);
     }
   };
 
-// ... (остальной JSX компонента)
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 p-8 !-mt-20"> {/* Убрал !-mt-20, если не нужно */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className={`max-w-lg mx-auto ${glassCard} p-6 space-y-6 text-white`}
+    <div className={styles.layout}>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={styles.card}
       >
-        <h1 className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-green-300 to-teal-300">
-          Новая запись в медкарте
-        </h1>
+        <div className={styles.header}>
+          <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-[22px] flex items-center justify-center mx-auto mb-6">
+            <FilePlus2 size={32} strokeWidth={2.5} />
+          </div>
+          <h1 className={styles.title}>Новый осмотр</h1>
+          <p className={styles.subtitle}>Внесение данных в историю болезни</p>
+        </div>
 
         {error && (
-          <div className={errorBox}> {/* Используем errorBox */}
-            {error} {/* Убрали "Ошибка: " т.к. error уже содержит это */}
+          <div className="bg-red-50 border-2 border-red-100 p-4 rounded-[22px] flex items-center gap-3 text-red-500 text-[10px] font-black uppercase tracking-tight mb-8">
+            <AlertCircle size={18} /> <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="visitDate" className="block mb-1 font-medium">Дата приёма</label>
-            <input
-              id="visitDate"
-              type="date"
-              value={visitDate}
-              onChange={e => setVisitDate(e.target.value)}
-              className={glassInput}
-              required
-            />
+        <form onSubmit={handleSubmit} className={styles.form}>
+          
+          {/* Visit Date */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><Calendar size={12} /> Дата приёма</label>
+            <div className={styles.inputContainer}>
+              <div className={styles.iconWrapper}><Calendar size={18} /></div>
+              <input
+                type="date"
+                value={visitDate}
+                onChange={e => setVisitDate(e.target.value)}
+                className={styles.input}
+                required
+              />
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="notes" className="block mb-1 font-medium">Заметки</label>
-            <textarea
-              id="notes"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              className={`${glassInput} h-32 resize-y`} // Увеличил высоту и разрешил resize по Y
-              required
-            />
+          {/* Notes */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><AlignLeft size={12} /> Клинические заметки</label>
+            <div className={styles.inputContainer}>
+              <div className={`${styles.iconWrapper} top-8`}><FileText size={18} /></div>
+              <textarea
+                placeholder="Опишите жалобы, статус и назначения..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className={styles.textarea}
+                required
+              />
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="attachments" className="block mb-1 font-medium">Вложения (макс. 5МБ каждое)</label>
-            <input
-              id="attachments"
-              type="file"
-              multiple
-              onChange={e => setFiles(e.target.files)}
-              className={`${glassInput} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100`}
-            />
-            {files && files.length > 0 && (
-                <div className="mt-2 text-xs text-gray-300">Выбрано файлов: {files.length}</div>
-            )}
+          {/* Attachments */}
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}><Paperclip size={12} /> Вложения (Анализы, снимки)</label>
+            <div className={styles.fileZone}>
+              <input
+                type="file"
+                multiple
+                onChange={e => setFiles(e.target.files)}
+                className={styles.fileInput}
+              />
+              <div className="text-emerald-500 mb-2 group-hover:scale-110 transition-transform">
+                <Paperclip size={24} />
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {files && files.length > 0 ? `Выбрано файлов: ${files.length}` : "Нажмите или перетащите файлы"}
+              </p>
+              <p className="text-[8px] text-slate-300 uppercase mt-1">PDF, JPG, PNG до 5MB</p>
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={submitting}
-            className={`${btnBase} ${btnSave}`}
+            className={styles.btnSave}
           >
-            {submitting ? 'Сохраняем…' : 'Сохранить запись'}
+            {submitting ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <><CheckCircle2 size={18} /> Зафиксировать приём</>
+            )}
           </button>
         </form>
+
+        <button 
+          onClick={() => router.back()} 
+          className={styles.btnBack}
+        >
+          <ArrowLeft size={14} strokeWidth={3} />
+          Отменить и вернуться
+        </button>
       </motion.div>
     </div>
-  );
+  )
 }
