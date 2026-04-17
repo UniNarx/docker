@@ -12,7 +12,8 @@ import {
   ClipboardList, 
   ShieldCheck,
   LogIn,
-  Activity
+  Activity,
+  MessageSquare
 } from "lucide-react";
 import {
     getRoleNameFromToken,
@@ -96,6 +97,7 @@ export default function NavBar() {
           <NavLink href="/public/doctors" icon={Stethoscope}>Врачи</NavLink>
           <NavLink href="/dashboard/patients/appointments" icon={Calendar}>Приёмы</NavLink>
           <NavLink href="/dashboard/patients/medical_records" icon={ClipboardList}>Медкарты</NavLink>
+          <NavLink href="/dashboard/chat" icon={MessageSquare}>Чат</NavLink>
           <NavLink href="/dashboard/patients/profile" icon={User}>Профиль</NavLink>
         </>
       );
@@ -106,6 +108,7 @@ export default function NavBar() {
         <>
           <NavLink href="/dashboard/doctors/patients" icon={Users}>Пациенты</NavLink>
           <NavLink href="/dashboard/doctors/appointments" icon={Calendar}>Приёмы</NavLink>
+          <NavLink href="/dashboard/chat" icon={MessageSquare}>Чат</NavLink>
           <NavLink href="/dashboard/doctors/profile" icon={User}>Профиль</NavLink>
         </>
       );
