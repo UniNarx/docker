@@ -1,15 +1,16 @@
-// frontend/src/components/chat/ConversationList.tsx
+'use client'
+
 import React from 'react';
-import { ConversationData, ChatParticipant } from '@/types/chat'; // Добавил ChatParticipant
+import { ConversationData, ChatParticipant } from '@/types/chat';
 import Image from 'next/image';
-import { UserCircle } from 'lucide-react';
+import { UserCircle, Hash } from 'lucide-react';
 
 interface ConversationListProps {
   conversations: ConversationData[];
   currentUserId: string;
   onSelectConversation: (conversation: ConversationData) => void;
   activeConversationId?: string | null;
-  activeChatUsers: ChatParticipant[]; // Новый пропс
+  activeChatUsers: ChatParticipant[];
 }
 
 const ConversationList: React.FC<ConversationListProps> = ({
@@ -17,25 +18,19 @@ const ConversationList: React.FC<ConversationListProps> = ({
   currentUserId,
   onSelectConversation,
   activeConversationId,
-  activeChatUsers, // Используем новый пропс
+  activeChatUsers,
 }) => {
-  if (!conversations || conversations.length === 0) {
-    // Теперь текст "Нет диалогов" будет отображаться в ChatPage, если и диалогов нет, и активных юзеров нет.
-    // Здесь можно вернуть null или более специфичное сообщение, если только диалогов нет, но есть активные.
-    // Пока оставим как есть, ChatPage будет решать, что показывать, если список пуст.
-    return null; 
-  }
+  if (!conversations || conversations.length === 0) return null;
 
-  // Создаем Set из ID активных пользователей для быстрой проверки
   const onlineUserIds = new Set(activeChatUsers.map(u => u.id));
 
   return (
-    <ul className="divide-y divide-white/10">
+    <ul className="divide-y divide-slate-100 bg-white overflow-hidden">
       {conversations.map((convo) => {
         const otherParticipant = convo.otherParticipant;
         const lastMsg = convo.lastMessage;
         const isActive = convo.conversationId === activeConversationId;
-        const isOtherParticipantOnline = onlineUserIds.has(otherParticipant.id); // Проверяем, онлайн ли собеседник
+        const isOnline = onlineUserIds.has(otherParticipant.id);
 
         const isLastMessageFromCurrentUser = lastMsg.senderId === currentUserId;
         const lastMessageText = isLastMessageFromCurrentUser
@@ -46,55 +41,68 @@ const ConversationList: React.FC<ConversationListProps> = ({
         if (lastMsg.timestamp) {
           const msgDate = new Date(lastMsg.timestamp);
           const today = new Date();
-          if (msgDate.toDateString() === today.toDateString()) {
-            displayTime = msgDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-          } else {
-            displayTime = msgDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
-          }
+          displayTime = msgDate.toDateString() === today.toDateString()
+            ? msgDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+            : msgDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
         }
 
         return (
-          <li key={convo.conversationId}>
+          <li key={convo.conversationId} className="relative overflow-hidden">
+            {/* Акцентная полоса при выборе */}
+            {isActive && (
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-900 z-10" />
+            )}
+            
             <button
               onClick={() => onSelectConversation(convo)}
-              className={`w-full text-left p-3 hover:bg-white/10 transition-colors duration-150 focus:outline-none ${
-                isActive ? 'bg-indigo-600/30' : ''
+              className={`w-full text-left p-5 transition-all duration-200 focus:outline-none relative ${
+                isActive ? 'bg-slate-50' : 'hover:bg-slate-50/50'
               }`}
             >
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0 relative"> {/* relative для позиционирования индикатора */}
+              <div className="flex items-center gap-4">
+                {/* Аватар в стиле "Блок" */}
+                <div className="relative flex-shrink-0">
                   {otherParticipant.avatarUrl ? (
                     <Image
                       src={otherParticipant.avatarUrl}
                       alt={otherParticipant.username}
-                      width={40}
-                      height={40}
-                      className="rounded-full object-cover"
+                      width={48}
+                      height={48}
+                      className="rounded-xl object-cover border border-slate-200 shadow-sm"
                     />
                   ) : (
-                    <UserCircle className={`w-10 h-10 ${isActive ? 'text-indigo-200' : 'text-gray-400'}`} />
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-colors ${
+                      isActive ? 'bg-slate-900 border-slate-900 text-white' : 'bg-slate-50 border-slate-200 text-slate-400'
+                    }`}>
+                      <UserCircle size={24} strokeWidth={1.5} />
+                    </div>
                   )}
-                  {/* Индикатор онлайна */}
-                  {isOtherParticipantOnline && (
-                    <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-400 ring-2 ring-gray-800/50"></span>
+                  
+                  {/* Индикатор онлайна: минималистичный ромб */}
+                  {isOnline && (
+                    <span className="absolute -top-1 -right-1 block h-3 w-3 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></span>
                   )}
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center">
-                    <p className={`text-sm font-semibold truncate ${isActive ? 'text-white' : 'text-gray-100'}`}>
-                      {otherParticipant.username}
+                  <div className="flex justify-between items-baseline mb-1">
+                    <p className={`text-sm font-black tracking-tight truncate ${isActive ? 'text-slate-900' : 'text-slate-700'}`}>
+                      {otherParticipant.username.toUpperCase()}
                     </p>
-                    <p className={`text-xs ${isActive ? 'text-indigo-200' : 'text-gray-400'}`}>
+                    <span className="text-[10px] font-mono font-bold text-slate-400">
                       {displayTime}
-                    </p>
+                    </span>
                   </div>
-                  <div className="flex justify-between items-center mt-1">
-                    <p className={`text-xs truncate pr-2 ${isActive ? 'text-gray-300' : 'text-gray-400'} ${(!isLastMessageFromCurrentUser && convo.unreadCount > 0 && !isActive) ? 'font-bold text-white/90' : ''}`}>
+
+                  <div className="flex justify-between items-center">
+                    <p className={`text-xs truncate pr-4 tracking-tight ${
+                      isActive ? 'text-slate-600' : 'text-slate-400'
+                    } ${(!isLastMessageFromCurrentUser && convo.unreadCount > 0 && !isActive) ? 'font-black text-slate-900' : 'font-medium'}`}>
                       {lastMessageText}
                     </p>
+                    
                     {convo.unreadCount > 0 && !isActive && (
-                      <span className="flex-shrink-0 bg-indigo-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                      <span className="flex-shrink-0 min-w-[18px] h-[18px] flex items-center justify-center bg-blue-600 text-[9px] font-black text-white px-1.5 rounded-md shadow-sm shadow-blue-200 transition-transform animate-in zoom-in-50">
                         {convo.unreadCount}
                       </span>
                     )}

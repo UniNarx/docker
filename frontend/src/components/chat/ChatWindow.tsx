@@ -1,8 +1,9 @@
-// frontend/src/components/chat/ChatWindow.tsx
+'use client'
+
 import React, { useState, useEffect, useRef, FormEvent } from 'react';
 import { ChatMessageData, ChatParticipant } from '@/types/chat';
-import { Send, CornerDownLeft, ArrowUpCircle, UserCircle, AlertTriangle } from 'lucide-react'; // Иконки
-import Image from 'next/image'; // Для аватаров
+import { Send, UserCircle, AlertTriangle, Hash, Clock } from 'lucide-react';
+import Image from 'next/image';
 
 interface ChatWindowProps {
   messages: ChatMessageData[];
@@ -27,31 +28,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 }) => {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null); // Для отслеживания скролла
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
-    // Скролл при первой загрузке или при новом сообщении, если мы уже внизу
     if (chatContainerRef.current) {
         const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-        // Скроллим, если это первая загрузка (scrollTop === 0) или если мы уже были внизу
-        // или если пришло новое сообщение от собеседника
         const lastMessage = messages[messages.length - 1];
-        const isScrolledToBottom = scrollHeight - scrollTop <= clientHeight + 150; // + небольшой буфер
+        const isScrolledToBottom = scrollHeight - scrollTop <= clientHeight + 150;
 
         if (messages.length > 0 && (!lastMessage || lastMessage.sender.id !== currentUser.id || isScrolledToBottom)) {
-             // Только скроллим если это не сообщение от текущего пользователя,
-             // или если мы уже внизу. Это предотвращает автоскролл, если пользователь просматривает историю.
             if (messages.length <= 20 || isScrolledToBottom || (lastMessage && lastMessage.sender.id !== currentUser.id)) {
-                 setTimeout(() => scrollToBottom("auto"), 100); // Небольшая задержка для рендера
+                 setTimeout(() => scrollToBottom("auto"), 100);
             }
         }
     }
   }, [messages, currentUser.id]);
-
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -75,50 +70,67 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   }, [hasMoreMessages, onLoadMoreMessages, isLoading]);
 
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Header с информацией о собеседнике */}
-      <div className="flex items-center p-3 border-b border-white/10 bg-white/10 shadow-sm">
-        {otherParticipant.avatarUrl ? ( // Замените на реальное поле, если есть
-            <Image src={otherParticipant.avatarUrl} alt={otherParticipant.username} width={36} height={36} className="rounded-full mr-3 object-cover"/>
-        ) : (
-            <UserCircle className="w-9 h-9 text-indigo-300 mr-3" />
-        )}
-        <h2 className="text-lg font-semibold text-white">{otherParticipant.username}</h2>
-        {/* Можно добавить статус (онлайн/офлайн), если бэкенд это поддерживает */}
+    <div className="flex flex-col h-full bg-[#f8f9fa] relative" style={{ 
+      backgroundImage: `radial-gradient(#e5e7eb 1px, transparent 1px)`, 
+      backgroundSize: '24px 24px' 
+    }}>
+      
+      {/* HEADER: Строгий и чистый */}
+      <div className="flex items-center justify-between p-6 bg-white border-b border-slate-200 shadow-sm z-10">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            {otherParticipant.avatarUrl ? (
+                <Image src={otherParticipant.avatarUrl} alt={otherParticipant.username} width={44} height={44} className="rounded-xl object-cover border border-slate-100 shadow-sm"/>
+            ) : (
+                <div className="w-11 h-11 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg">
+                  <UserCircle size={24} strokeWidth={1.5} />
+                </div>
+            )}
+            <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
+          </div>
+          <div>
+            <h2 className="text-base font-black text-slate-900 tracking-tight leading-none">{otherParticipant.username}</h2>
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest">Active Session</span>
+            </div>
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg">
+           <Hash size={12} className="text-slate-300" />
+           <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-tighter">Terminal // 04-A</span>
+        </div>
       </div>
 
-      {/* Окно сообщений */}
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-gradient-to-br from-gray-700/10 via-gray-800/20 to-gray-900/30">
-        {isLoading && messages.length === 0 && (
-          <div className="flex justify-center items-center h-full">
-            <p className="text-gray-400">Загрузка сообщений...</p>
-          </div>
-        )}
+      {/* MESSAGES AREA */}
+      <div 
+        ref={chatContainerRef} 
+        className="flex-1 overflow-y-auto p-8 space-y-6 scrollbar-hide"
+      >
         {chatError && (
-            <div className="p-3 bg-red-500/20 text-red-300 rounded-md flex items-center">
-                <AlertTriangle className="w-5 h-5 mr-2"/>
+            <div className="p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl flex items-center gap-3 font-bold text-xs uppercase tracking-tight">
+                <AlertTriangle className="w-4 h-4"/>
                 {chatError}
             </div>
         )}
-        {hasMoreMessages && onLoadMoreMessages && (
-             <div className="text-center">
+
+        {hasMoreMessages && (
+             <div className="flex justify-center pb-4">
                 <button
                     onClick={onLoadMoreMessages}
                     disabled={isLoading}
-                    className="text-indigo-300 hover:text-indigo-200 text-sm py-1 px-3 rounded-full hover:bg-white/10 transition"
+                    className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-4 py-2 hover:text-slate-900 transition-all border border-transparent hover:border-slate-200 rounded-full"
                 >
-                    {isLoading ? 'Загрузка...' : 'Загрузить еще'}
+                    {isLoading ? 'Загрузка...' : 'Загрузить историю'}
                 </button>
             </div>
         )}
+
         {messages.map((msg, index) => {
           const isCurrentUserSender = msg.sender.id === currentUser.id;
           const messageDate = new Date(msg.timestamp);
           const displayTime = messageDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
-          // Группировка по дате
           let showDateSeparator = false;
           if (index === 0) {
             showDateSeparator = true;
@@ -132,35 +144,45 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           return (
             <React.Fragment key={msg._id || `msg-${index}`}>
               {showDateSeparator && (
-                <div className="text-center my-3">
-                  <span className="text-xs text-gray-400 bg-gray-700/50 px-2 py-1 rounded-full">
-                    {messageDate.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' })}
+                <div className="flex items-center gap-4 my-8">
+                  <div className="h-[1px] flex-1 bg-slate-200/60" />
+                  <span className="text-[9px] font-mono font-black text-slate-300 uppercase tracking-[0.3em]">
+                    {messageDate.toLocaleDateString('ru-RU', { month: 'long', day: 'numeric' })}
                   </span>
+                  <div className="h-[1px] flex-1 bg-slate-200/60" />
                 </div>
               )}
-              <div className={`flex ${isCurrentUserSender ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-xs lg:max-w-md px-3 py-2 rounded-xl shadow ${
-                    isCurrentUserSender
-                      ? 'bg-indigo-500 text-white rounded-br-none'
-                      : 'bg-gray-600 text-gray-100 rounded-bl-none'
-                  }`}
-                >
-                  {!isCurrentUserSender && (
-                    <p className="text-xs font-semibold text-indigo-300 mb-0.5">
-                      {msg.sender.username}
+              
+              <div className={`flex ${isCurrentUserSender ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                <div className={`flex flex-col ${isCurrentUserSender ? 'items-end' : 'items-start'} max-w-[80%]`}>
+                  
+                  <div
+                    className={`px-5 py-4 shadow-sm border ${
+                      isCurrentUserSender
+                        ? 'bg-slate-900 border-slate-800 text-white rounded-[24px] rounded-br-none shadow-slate-200 shadow-xl'
+                        : 'bg-white border-slate-200 text-slate-900 rounded-[24px] rounded-bl-none'
+                    }`}
+                  >
+                    <p className="text-[14px] leading-relaxed font-medium whitespace-pre-wrap tracking-tight">
+                      {msg.message || msg.text}
                     </p>
-                  )}
-                  <p className="text-sm whitespace-pre-wrap">{msg.message || msg.text}</p>
-                  <p className={`text-xs mt-1 ${isCurrentUserSender ? 'text-indigo-200 text-right' : 'text-gray-400 text-left'}`}>
-                    {displayTime}
-                    {isCurrentUserSender && msg.read && ( // Галочки прочтения
-                        <span className="ml-1">✓✓</span>
+                  </div>
+                  
+                  <div className={`flex items-center gap-2 mt-2 px-1`}>
+                    {!isCurrentUserSender && (
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{msg.sender.username}</span>
                     )}
-                     {isCurrentUserSender && !msg.read && msg._id && !msg._id.startsWith('temp-') && ( // Одна галочка для доставленных, но не прочитанных
-                        <span className="ml-1">✓</span>
+                    <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-slate-300">
+                      <Clock size={10} />
+                      {displayTime}
+                    </div>
+                    {isCurrentUserSender && (
+                      <div className={`text-[10px] font-black ${msg.read ? 'text-blue-500' : 'text-slate-300'}`}>
+                        {msg.read ? '• DONE' : '• SENT'}
+                      </div>
                     )}
-                  </p>
+                  </div>
+
                 </div>
               </div>
             </React.Fragment>
@@ -169,26 +191,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Поле ввода сообщения */}
-      <form onSubmit={handleSubmit} className="p-3 border-t border-white/10 bg-white/10">
-        <div className="flex items-center space-x-2">
+      {/* INPUT AREA: Монолитный блок */}
+      <div className="p-8 bg-white border-t border-slate-200 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.05)]">
+        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex items-center gap-4 bg-slate-50 border border-slate-200 p-2 rounded-2xl focus-within:border-slate-400 transition-all">
           <input
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Введите сообщение..."
-            className="flex-1 bg-gray-700/50 border border-gray-600 rounded-lg px-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition"
+            placeholder="Сообщение..."
+            className="flex-1 bg-transparent px-4 py-2 text-sm text-slate-900 placeholder-slate-400 font-bold tracking-tight focus:outline-none"
             autoComplete="off"
           />
           <button
             type="submit"
             disabled={!inputText.trim()}
-            className="p-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group flex items-center justify-center w-11 h-11 bg-slate-900 text-white rounded-xl hover:bg-black transition-all disabled:opacity-20 disabled:grayscale"
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
           </button>
+        </form>
+        <div className="mt-4 flex justify-center">
+            <p className="text-[9px] font-mono font-bold text-slate-300 uppercase tracking-[0.4em]">Press Enter to dispatch</p>
         </div>
-      </form>
+      </div>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-/* src/app/public/doctors/page.tsx */
+/* src/app/page.tsx */
 'use client'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'

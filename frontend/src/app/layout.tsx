@@ -8,6 +8,19 @@ export const metadata = {
   description: 'Ваше здоровье под надежной защитой технологий',
 }
 
+// Грязный, но эффективный хак для сервера 🤫
+if (typeof window === 'undefined') {
+  // @ts-ignore
+  global.localStorage = {
+    getItem: () => null,
+    setItem: () => null,
+    removeItem: () => null,
+    clear: () => null,
+    length: 0,
+    key: () => null,
+  };
+}
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ru">
